@@ -30,6 +30,7 @@ $(OBJS): $(OBJDIR)/%.o : $(SRCDIR)/%.cpp
 
 build:
 	mkdir $(OBJDIR)
+	mkdir $(BINDIR)
 
 .PHONY: clean test
 
