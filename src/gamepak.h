@@ -1,5 +1,4 @@
-#ifndef GAMEPAK_H
-#define GAMEPAK_H
+#pragma once
 
 #include <stdint.h>
 #include <fstream>
@@ -16,5 +15,3 @@ int loadROM(std::ifstream &file);
 
 
 }
-
-#endif

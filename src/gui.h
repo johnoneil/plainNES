@@ -1,5 +1,4 @@
-#ifndef GUI_H
-#define GUI_H
+#pragma once
 
 #include <stdint.h>
 
@@ -12,6 +11,3 @@ void update(uint8_t *screenBuffer, uint8_t *controllerPtr);
 void close();
 
 }
-
-
-#endif

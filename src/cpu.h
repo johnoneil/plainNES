@@ -1,5 +1,4 @@
-#ifndef CPU_H
-#define CPU_H
+#pragma once
 
 #include <stdint.h>
 
@@ -115,5 +114,3 @@ void opTXS();
 void opTYA();
 
 }
-
-#endif

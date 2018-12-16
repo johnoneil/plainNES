@@ -1,5 +1,4 @@
-#ifndef PPU_H
-#define PPU_H
+#pragma once
 
 #include <stdint.h>
 
@@ -24,5 +23,3 @@ bool isframeReady();
 void setframeReady(bool set);
 
 }
-
-#endif
