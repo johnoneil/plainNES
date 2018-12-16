@@ -2,11 +2,12 @@
 #include <iomanip>
 #include <fstream>
 #include <string>
-//#include <SDL2/SDL.h>
+#include <exception>
 
+#include "gui.h"
 #include "cpu.h"
-//#include "ppu.h"
-//#include "io.h"
+#include "ppu.h"
+#include "io.h"
 #include "gamepak.h"
 
 
@@ -40,17 +41,26 @@ int main(int argc, char *argv[])
 	}
 	file.close();
 	
+	GUI::init();
 	CPU::init();
+	PPU::init();
+
 	if(debug_PC_start_flag)
 		CPU::setPC(debug_PC_start);
 
-	std::cout << "Starting..." << std::endl;
-
-	std::cout << std::hex << std::uppercase;
 	try {
-		for(int i=0; i<10000; ++i) {
-			CPU::step();
+		while(GUI::quit == 0 && CPU::alive)
+		//while(true)
+		{
+			while(PPU::isframeReady() == 0)
+				CPU::step();
+			GUI::update(PPU::getPixelMap(),IO::getControllerStatePtr());
+			PPU::setframeReady(false);
 		}
+	}
+	catch (std::exception& e)
+	{
+		std::cout << "Standard exception: " << e.what() << std::endl;
 	}
 	catch (int e) {
 		if(e == 1) {
@@ -61,5 +71,6 @@ int main(int argc, char *argv[])
 		}
 	}
 		
+	GUI::close();
 	return 0;
 }

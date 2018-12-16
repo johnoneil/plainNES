@@ -5,12 +5,17 @@
 
 namespace CPU {
 
+extern bool alive;
+
 void init();
 void step();
 void tick();
+long long getCycles();
 uint8_t memGet(uint16_t addr);
 void memSet(uint16_t addr, uint8_t val);
 void OAMDMA_write();
+void triggerNMI();
+void triggerIRQ();
 void getStateString();
 void logStep();
 void closeLog();
@@ -30,9 +35,13 @@ uint16_t IndirectY();
 
 //CPU operation functions
 void opADC(uint16_t addr);
+void opALR(uint16_t addr);
+void opANC(uint16_t addr);
 void opAND(uint16_t addr);
+void opARR(uint16_t addr);
 void opASL();
 void opASL(uint16_t addr);
+void opAXS(uint16_t addr);
 void opBCC();
 void opBCS();
 void opBEQ();
@@ -53,6 +62,7 @@ void opCPX(uint8_t M);
 void opCPX(uint16_t addr);
 void opCPY(uint8_t M);
 void opCPY(uint16_t addr);
+void opDCP(uint16_t addr);
 void opDEC(uint16_t addr);
 void opDEX();
 void opDEY();
@@ -61,8 +71,10 @@ void opEOR(uint16_t addr);
 void opINC(uint16_t addr);
 void opINX();
 void opINY();
+void opISC(uint16_t addr);
 void opJMP(uint16_t addr);
 void opJSR(uint16_t addr);
+void opLAX(uint16_t addr);
 void opLDA();
 void opLDA(uint16_t addr);
 void opLDX();
@@ -77,16 +89,21 @@ void opPHA();
 void opPHP();
 void opPLA();
 void opPLP();
+void opRLA(uint16_t addr);
 void opROL();
 void opROL(uint16_t addr);
 void opROR();
 void opROR(uint16_t addr);
+void opRRA(uint16_t addr);
 void opRTI();
 void opRTS();
+void opSAX(uint16_t addr);
 void opSBC(uint16_t addr);
 void opSEC();
 void opSED();
 void opSEI();
+void opSLO(uint16_t addr);
+void opSRE(uint16_t addr);
 void opSTA(uint16_t addr);
 void opSTX(uint16_t addr);
 void opSTY(uint16_t addr);

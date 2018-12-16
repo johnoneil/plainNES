@@ -1,7 +1,8 @@
 # Compiler
 CC = g++
 OPTS = -Wall -g
-#-fno-exceptions may remove requirement for libstdc++-6.dll
+#-O3
+#-pg
 
 # Project name
 PROJECT = NESEmu
@@ -11,8 +12,11 @@ BINDIR = bin
 OBJDIR = build
 SRCDIR = src
 
-# Libraries
-LINKER_FLAGS =
+# Include Paths
+INCLUDE_PATHS = -IC:\dev_libs\SDL2\include\SDL2
+
+# LINKER_FLAGS
+LINKER_FLAGS = -lmingw32 -lSDL2main -lSDL2
 
 # Files and folders
 #SRC_FILES = main.cpp gamepak.cpp cpu.cpp
@@ -20,19 +24,21 @@ LINKER_FLAGS =
 SRCS = $(wildcard $(SRCDIR)/*.cpp)
 OBJS = $(patsubst $(SRCDIR)/%.cpp,$(OBJDIR)/%.o,$(SRCS))
 
-all: build $(BINDIR)/$(PROJECT)
+all: $(OBJDIR) $(BINDIR) $(BINDIR)/$(PROJECT)
 
 $(BINDIR)/$(PROJECT): $(OBJS)
-	$(CC) $(OPTS) -o $@ $(OBJS)
+	$(CC) $(OBJS) $(LINKER_FLAGS) $(OPTS) -o $@
 
 $(OBJS): $(OBJDIR)/%.o : $(SRCDIR)/%.cpp
-	$(CC) $(OPTS) $(LINKER_FLAGS) -c $< -o $@
+	$(CC) $< -c $(OPTS) $(INCLUDE_PATHS) -o $@
 
-build:
+$(OBJDIR):
 	mkdir $(OBJDIR)
+
+$(BINDIR):
 	mkdir $(BINDIR)
 
-.PHONY: clean test
+.PHONY: clean
 
 clean:
 	rmdir $(OBJDIR) /S /Q
