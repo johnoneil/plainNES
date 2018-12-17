@@ -5,7 +5,7 @@ OPTS = -Wall -g
 #-pg
 
 # Project name
-PROJECT = NESEmu
+PROJECT = plainNES
 
 # Directories
 BINDIR = bin
