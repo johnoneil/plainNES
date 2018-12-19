@@ -8,8 +8,6 @@ void init();
 void step();
 uint8_t regGet(uint16_t addr);
 void regSet(uint16_t addr, uint8_t val);
-uint8_t getVRAM(uint16_t addr);
-void setVRAM(uint16_t addr, uint8_t val);
 uint8_t getPalette(uint16_t addr);
 void setPalette(uint16_t addr, uint8_t val);
 void renderFrameStep();

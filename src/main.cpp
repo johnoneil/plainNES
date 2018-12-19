@@ -35,7 +35,7 @@ int main(int argc, char *argv[])
 		}
 	}
 	
-	if(GAMEPAK::loadROM(file) < 0) {
+	if(GAMEPAK::init(file) < 0) {
 		std::cout << "Invalid file\n" << std::endl;
 		return -1;
 	}

@@ -1,6 +1,7 @@
 #include "ppu.h"
 #include "gamepak.h"
 #include "cpu.h"
+#include "utils.h"
 #include <iostream>
 #include <cstring>
 
@@ -17,6 +18,20 @@ bool frameReady;
 /////Internal registers, memory, and flags//////////
 ////////////////////////////////////////////////////
 
+struct VRAM {
+	union {
+		uint16_t value;
+		BitWorker<0, 5, uint16_t> coarseX;
+		BitWorker<5, 5, uint16_t> coarseY;
+		BitWorker<10, 2, uint16_t> NTsel;
+		BitWorker<12, 3, uint16_t> fineY;
+		BitWorker<8, 6, uint16_t> addrWrite1;
+		BitWorker<14, 1, uint16_t> bit14;
+		BitWorker<0, 8, uint16_t> addrWrite2;
+		BitWorker<10, 1, uint16_t> bit10;
+		BitWorker<11, 4, uint16_t> upperY;
+	};
+}  currVRAM_addr, tempVRAM_addr;
 /*union VRAMreg {
 	uint16_t raw;
 	struct __attribute__ ((__packed__)) ctrlVals {
@@ -27,7 +42,7 @@ bool frameReady;
 		uint8_t junk : 1; //Junk bit
 	} v;
 } currVRAM_addr, tempVRAM_addr; //v and t in nesdev wiki*/
-uint16_t currVRAM_addr, tempVRAM_addr; //v and t in nesdev wiki
+//uint16_t currVRAM_addr, tempVRAM_addr; //v and t in nesdev wiki
 uint8_t fineXscroll;	//x in nesdev wiki
 bool writeToggle;		//w in nesdev wiki
 uint16_t BGtiledata_upper, BGtiledata_lower;
@@ -35,7 +50,7 @@ uint8_t BGattri_upper, BGattri_lower;
 
 //Background latches and shift registers
 uint8_t NTlatch, ATlatch, BGLlatch, BGHlatch;
-uint8_t ATshiftL, ATshiftH;
+uint16_t ATshiftL, ATshiftH;
 uint16_t BGshiftL, BGshiftH;
 
 //Sprite memory, latches, shift registers, and counters
@@ -47,7 +62,7 @@ uint8_t spriteL[8];
 uint8_t spriteCounter[8];
 bool spr0inrange;
 
-uint8_t VRAM[2048]; //2k VRAM chip used for Nametables. Can be bypassed by mappers
+uint8_t VRAM_buffer;
 uint8_t paletteRAM[32]; //Internal palette control RAM. Can't be mapped
 
 //PPUCTRL flags
@@ -103,12 +118,9 @@ void step()
 		vblank = spr0hit = sprOverflow = false;
 	}
 
-	if(scanline < 240 && dot < 257 && dot != 0) {
+	if(scanline <= 239 || scanline == 261) {
 		renderPixel();
-	}
-
-	if(rendering & (scanline <= 239 || scanline == 261)) {
-		renderFrameStep();
+		if(rendering) renderFrameStep();
 	}
 
 	++dot;
@@ -168,9 +180,20 @@ uint8_t regGet(uint16_t addr)
 		case 0x2007: //PPUDATA
 			{
 			//TODO: Implement special behavior during rendering
-			uint8_t data = GAMEPAK::PPUmemGet(currVRAM_addr);
-			if(incrementMode == 0) ++currVRAM_addr;
-			else currVRAM_addr += 32;
+			uint8_t data;
+			//For normal VRAM, reads work this way: VRAM ---> buffer ---> CPU
+			//For palette, reads work this way: Palette ---> CPU  |  VRAM(palette addr - 0x1000) ---> buffer
+			//Can directly access palette since never mapped
+			if((currVRAM_addr.value % 0x4000) >= 0x3F00) {	//Palette read
+				data = getPalette(currVRAM_addr.value % 0x20);
+				VRAM_buffer = GAMEPAK::PPUmemGet(currVRAM_addr.value - 0x1000);
+			}
+			else {
+				data = VRAM_buffer;
+				VRAM_buffer = GAMEPAK::PPUmemGet(currVRAM_addr.value);
+			}
+			if(incrementMode == 0) ++currVRAM_addr.value;
+			else currVRAM_addr.value += 32;
 			return data;
 			}
 			break;
@@ -192,7 +215,8 @@ void regSet(uint16_t addr, uint8_t val)
 			backgroundTileSel = (val & 0x10) > 0;
 			spriteTileSel = (val & 0x08) > 0;
 			incrementMode = (val & 0x04) > 0;
-			tempVRAM_addr = (tempVRAM_addr & ~0xC00) | ((val << 10) & 0xC00);
+			tempVRAM_addr.NTsel = val & 3;
+			//tempVRAM_addr = (tempVRAM_addr & ~0xC00) | ((val << 10) & 0xC00);
 			break;
 		case 0x2001: //PPUMASK
 			greyscale = (val & 0x01) > 0;
@@ -222,34 +246,40 @@ void regSet(uint16_t addr, uint8_t val)
 
 		case 0x2005: //PPUSCROLL
 			if(writeToggle == 0) {
-				tempVRAM_addr = (tempVRAM_addr & ~0x001F) | ((val >> 3) & 0x001F);
+				tempVRAM_addr.coarseX = ((val >> 3) & 0x001F);
+				//tempVRAM_addr = (tempVRAM_addr & ~0x001F) | ((val >> 3) & 0x001F);
 				fineXscroll = val & 0x07;
 				writeToggle = true;
 			}
 			else {
-				tempVRAM_addr = (tempVRAM_addr & ~0x7000) | ((val & 0x07) << 12);
-				tempVRAM_addr = (tempVRAM_addr & ~0x03E0) | ((val & 0xF8) << 5);
+				tempVRAM_addr.coarseY = (val >> 3) & 0x1F;
+				tempVRAM_addr.fineY = val & 0x7;
+				//tempVRAM_addr = (tempVRAM_addr & ~0x7000) | ((val & 0x07) << 12);
+				//tempVRAM_addr = (tempVRAM_addr & ~0x03E0) | ((val & 0xF8) << 5);
 				writeToggle = false;
 			}
 			break;
 
 		case 0x2006: //PPUADDR
 			if(writeToggle == 0) {
-				tempVRAM_addr = (tempVRAM_addr & 0xFF) | ((uint16_t)(val & 0x3F) << 8);
+				tempVRAM_addr.bit14 = 0;
+				tempVRAM_addr.addrWrite1 = val & 0x3F;
+				//tempVRAM_addr = (tempVRAM_addr & 0xFF) | ((uint16_t)(val & 0x3F) << 8);
 				writeToggle = true;
 			}
 			else {
-				tempVRAM_addr = (tempVRAM_addr & 0xFF00) | val;
+				tempVRAM_addr.addrWrite2 = val;
+				//tempVRAM_addr = (tempVRAM_addr & 0xFF00) | val;
 				writeToggle = false;
-				currVRAM_addr = tempVRAM_addr;
+				currVRAM_addr.value = tempVRAM_addr.value;
 			}
 			break;
 
 		case 0x2007: //PPUDATA
 			//TODO: Implement special behavior during rendering
-			GAMEPAK::PPUmemSet(currVRAM_addr, val);
-			if(incrementMode == 0) ++currVRAM_addr;
-			else currVRAM_addr += 32;
+			GAMEPAK::PPUmemSet(currVRAM_addr.value, val);
+			if(incrementMode == 0) ++currVRAM_addr.value;
+			else currVRAM_addr.value += 32;
 			break;
 		default:
 			std::cout << "Invalid PPU register access" << std::endl;
@@ -257,30 +287,20 @@ void regSet(uint16_t addr, uint8_t val)
 	}
 }
 
-uint8_t getVRAM(uint16_t addr)
-{
-	return VRAM[addr];
-}
-
-void setVRAM(uint16_t addr, uint8_t val)
-{
-	VRAM[addr] = val;
-}
-
 uint8_t getPalette(uint16_t addr)
 {
 	switch(addr) {
-		case 0x3F10:
-			addr = 0x3F00;
+		case 0x10:
+			addr = 0x00;
 			break;
-		case 0x3F14:
-			addr = 0x3F04;
+		case 0x14:
+			addr = 0x04;
 			break;
-		case 0x3F18:
-			addr = 0x3F08;
+		case 0x18:
+			addr = 0x08;
 			break;
-		case 0x3F1C:
-			addr = 0x3F0C;
+		case 0x1C:
+			addr = 0x0C;
 			break;
 	}
 	return paletteRAM[addr % 0x20];
@@ -289,17 +309,17 @@ uint8_t getPalette(uint16_t addr)
 void setPalette(uint16_t addr, uint8_t val)
 {
 	switch(addr) {
-		case 0x3F10:
-			addr = 0x3F00;
+		case 0x10:
+			addr = 0x00;
 			break;
-		case 0x3F14:
-			addr = 0x3F04;
+		case 0x14:
+			addr = 0x04;
 			break;
-		case 0x3F18:
-			addr = 0x3F08;
+		case 0x18:
+			addr = 0x08;
 			break;
-		case 0x3F1C:
-			addr = 0x3F0C;
+		case 0x1C:
+			addr = 0x0C;
 			break;
 	}
 	paletteRAM[addr % 0x20] = val;
@@ -316,28 +336,31 @@ void renderFrameStep()
 		case 1 ... 256: case 321 ... 336:
 			switch(dot % 8) {
 				case 1:
-					NTlatch = GAMEPAK::PPUmemGet(0x2000 + (currVRAM_addr & 0x0FFF));
+					NTlatch = GAMEPAK::PPUmemGet(0x2000 + (currVRAM_addr.value & 0x0FFF));
 					break;
 				case 3:
+					//ATlatch = GAMEPAK::PPUmemGet( 0x23C0 + (currVRAM_addr & 0xC00) + ((currVRAM_addr & 0x1F) / 4) + (((currVRAM_addr & 0x3E0) / 4) << 3));
+					ATlatch = GAMEPAK::PPUmemGet( 0x23C0 + (currVRAM_addr.NTsel << 10) + ((currVRAM_addr.coarseX) / 4) + (((currVRAM_addr.coarseY) / 4) << 3));
+					if((currVRAM_addr.coarseY % 4) >= 2) ATlatch >>= 4;
+					if((currVRAM_addr.coarseX % 4) >= 2) ATlatch >>= 2;
+					ATlatch &= 0x3;
 					//ATlatch = GAMEPAK::PPUmemGet(0x23C0 | (currVRAM_addr.raw & 0x0C00) | ((currVRAM_addr.raw >> 4) & 0x38) | ((currVRAM_addr.raw >> 2) & 0x07));
-					ATlatch = GAMEPAK::PPUmemGet(0x23C0 | (currVRAM_addr & 0x0C00) | ((((currVRAM_addr & 0x3E0) >> 5) / 4) << 3) | ((currVRAM_addr & 0x1F) / 4));
+					//ATlatch = GAMEPAK::PPUmemGet(0x23C0 | (currVRAM_addr & 0x0C00) | ((((currVRAM_addr & 0x3E0) >> 5) / 4) << 3) | ((currVRAM_addr & 0x1F) / 4));
 					//Shift AT to get proper quadrant bits over to bits 0 and 1
-					if(((currVRAM_addr & 0x3E0) >> 5) & 2) ATlatch >>= 4;
-					if((currVRAM_addr & 0x1F) & 2) ATlatch >>= 2;
+					//if(((currVRAM_addr & 0x3E0) >> 5) & 2) ATlatch >>= 4;
+					//if((currVRAM_addr & 0x1F) & 2) ATlatch >>= 2;
 					break;
 				case 5:
-					{
-					uint16_t BGtileaddr = ((uint16_t)NTlatch << 4) | (currVRAM_addr >> 12);
-					if(backgroundTileSel) BGtileaddr += 0x1000;
-					BGLlatch = GAMEPAK::PPUmemGet(BGtileaddr);
-					}
+					BGLlatch = GAMEPAK::PPUmemGet((NTlatch << 4) + currVRAM_addr.fineY + (backgroundTileSel ? 0x1000 : 0));
+					//uint16_t BGtileaddr = ((uint16_t)NTlatch << 4) | (currVRAM_addr >> 12);
+					//if(backgroundTileSel) BGtileaddr += 0x1000;
+					//BGLlatch = GAMEPAK::PPUmemGet(BGtileaddr);
 					break;
 				case 7:
-					{
-					uint16_t BGtileaddr = ((uint16_t)NTlatch << 4) | (currVRAM_addr >> 12);
-					if(backgroundTileSel) BGtileaddr += 0x1000;
-					BGHlatch = GAMEPAK::PPUmemGet(BGtileaddr + 8);
-					}
+					BGHlatch = GAMEPAK::PPUmemGet((NTlatch << 4) + currVRAM_addr.fineY + (backgroundTileSel ? 0x1000 : 0) + 8);
+					//uint16_t BGtileaddr = ((uint16_t)NTlatch << 4) | (currVRAM_addr >> 12);
+					//if(backgroundTileSel) BGtileaddr += 0x1000;
+					//BGHlatch = GAMEPAK::PPUmemGet(BGtileaddr + 8);
 					break;
 				case 0:
 					if(dot != 256)
@@ -345,27 +368,35 @@ void renderFrameStep()
 					else
 						incrementVert();
 					//Load latches into shift registers every 8 cycles
+					//Treating AT shift registers as 16 bit makes things easier
 					BGshiftL = (BGshiftL & 0xFF00) | BGLlatch;
 					BGshiftH = (BGshiftH & 0xFF00) | BGHlatch;
+					ATshiftL = (ATshiftL & 0xFF00) | (((ATlatch & 1) > 0) ? 0xFF : 0);
+					ATshiftH = (ATshiftH & 0xFF00) | (((ATlatch & 2) > 0) ? 0xFF : 0);
 					break;
 			}
 			break;
-		case 257:
+		case 257: {
 			//hori(v) = hori(t)
-			currVRAM_addr &= 0x7BE0;
-			currVRAM_addr |= (tempVRAM_addr & 0x041F);
+			currVRAM_addr.coarseX = tempVRAM_addr.coarseX;
+			currVRAM_addr.bit10 = tempVRAM_addr.bit10;
+			//currVRAM_addr &= 0x7BE0;
+			//currVRAM_addr |= (tempVRAM_addr & 0x041F);
+		}
 			break;
 		case 280 ... 304:
 			//Do nothing if not pre-render
 			if(scanline == 261) {
 				//vert(v) = vert(t) each dot
-				currVRAM_addr &= 0x041F;
-				currVRAM_addr |= (tempVRAM_addr & 0x7BE0);
+				currVRAM_addr.coarseY = tempVRAM_addr.coarseY;
+				currVRAM_addr.upperY = tempVRAM_addr.upperY;
+				//currVRAM_addr &= 0x041F;
+				//currVRAM_addr |= (tempVRAM_addr & 0x7BE0);
 			}
 			break;
 		case 337: case 339:
 			//Fetch unused NT byte
-			GAMEPAK::PPUmemGet(0x2000 + (currVRAM_addr & 0x0FFF));
+			GAMEPAK::PPUmemGet(0x2000 + (currVRAM_addr.value & 0x0FFF));
 			break;
 	}
 }
@@ -447,76 +478,83 @@ void renderPixel()
 	uint8_t BGpixelColor, SPRpixelColor, pixelColor; //Which color to use from palette
 	BGpixelColor = SPRpixelColor = pixelColor = 0;
 	bool sprPriority = false;
-	if(scanline < 240 && rendering) {
-		if(showBG) {
-			BGpixelColor = (BGshiftL >> (15-fineXscroll)) & (1);
-			BGpixelColor |= (BGshiftH >> (14-fineXscroll)) & (2);
-			BGpixelColor |= (ATshiftL << 2) & 4;
-			BGpixelColor |= (ATshiftH << 3) & 8;
-		}
-		if(showSpr) {
-			for(int i = 0; i<8; ++i) {
-				if(spriteCounter[i] > 0) {
-					--spriteCounter[i];
-					continue;
-				}
-				if(SPRpixelColor == 0) { //Still looking for a sprite pixel
-					uint8_t currSprColor = 0;
-					if((spriteL[i] & 0x40) == 0) { //Not flipped horizontally
-						currSprColor = (sprite_shiftL[i] >> 7) | ((sprite_shiftH[i] >> 6) & 2);
-						sprite_shiftL[i] <<= 1;
-						sprite_shiftH[i] <<= 1;
+	if(scanline < 240 && dot > 0 && dot <= 256) {
+		if(rendering) {
+			if(showBG) {
+				BGpixelColor = (BGshiftL >> (15-fineXscroll)) & (1);
+				BGpixelColor |= (BGshiftH >> (14-fineXscroll)) & (2);
+				BGpixelColor |= (ATshiftL >> (13-fineXscroll)) & (4);
+				BGpixelColor |= (ATshiftH >> (12-fineXscroll)) & (8);
+			}
+			if(showSpr) {
+				for(int i = 0; i<8; ++i) {
+					if(spriteCounter[i] > 0) {
+						--spriteCounter[i];
+						continue;
 					}
-					else {
-						currSprColor = (sprite_shiftL[i] & 1) | ((sprite_shiftH[i] & 1) << 1);
-						sprite_shiftL[i] >>= 1;
-						sprite_shiftH[i] >>= 1;
+					if(SPRpixelColor == 0) { //Still looking for a sprite pixel
+						uint8_t currSprColor = 0;
+						if((spriteL[i] & 0x40) == 0) { //Not flipped horizontally
+							currSprColor = (sprite_shiftL[i] >> 7) | ((sprite_shiftH[i] >> 6) & 2);
+							sprite_shiftL[i] <<= 1;
+							sprite_shiftH[i] <<= 1;
+						}
+						else {
+							currSprColor = (sprite_shiftL[i] & 1) | ((sprite_shiftH[i] & 1) << 1);
+							sprite_shiftL[i] >>= 1;
+							sprite_shiftH[i] >>= 1;
+						}
+						if(currSprColor == 0) continue; //Transparent, so we can move on
+						sprPriority = (spriteL[i] & 0x20) == 0;
+						SPRpixelColor = ((spriteL[i] & 3) << 2) + currSprColor;
 					}
-					if(currSprColor == 0) continue; //Transparent, so we can move on
-					sprPriority = (spriteL[i] & 0x20) == 0;
-					SPRpixelColor = ((spriteL[i] & 3) << 2) + currSprColor;
 				}
 			}
+
+			if(BGpixelColor == 0)
+				pixelColor = SPRpixelColor;
+			else if(SPRpixelColor == 0)
+				pixelColor = BGpixelColor;
+			else if(sprPriority)
+				pixelColor = SPRpixelColor;
+			else
+				pixelColor = BGpixelColor;
+
+			if((pixelColor & 3) == 0) pixelColor = 0; //Set to universal background color
+
+			pixelMap[scanline*256 + dot - 1] = getPalette(0x3F00 + (uint16_t)pixelColor);
 		}
-
-		if(BGpixelColor == 0)
-			pixelColor = SPRpixelColor;
-		else if(SPRpixelColor == 0)
-			pixelColor = BGpixelColor;
-		else if(sprPriority)
-			pixelColor = SPRpixelColor;
-		else
-			pixelColor = BGpixelColor;
-
-		if((pixelColor & 3) == 0) pixelColor = 0; //Set to universal background color
-
-		pixelMap[scanline*256 + dot - 1] = getPalette(0x3F00 + (uint16_t)pixelColor);
-	}
-	else if(~rendering) {
-		//TODO allow feature for color to be chosen by current VRAM address
-		pixelMap[scanline*256 + dot - 1] = getPalette(0x3F00 + (uint16_t)pixelColor);
+		else {
+			//TODO allow feature for color to be chosen by current VRAM address
+			pixelMap[scanline*256 + dot - 1] = getPalette(0x3F00 + (uint16_t)pixelColor);
+		}
 	}
 	
-
-	//Shift registers
-	BGshiftL <<= 1;
-	BGshiftH <<= 1;
-	ATshiftL = (ATshiftL << 1) | ATshiftL;
-	ATshiftH = (ATshiftH << 1) | ATshiftH;
+	if(dot > 0 && dot < 337 && (dot < 257 || dot > 320)) {
+		//Shift registers
+		BGshiftL <<= 1;
+		BGshiftH <<= 1;
+		ATshiftL <<= 1;
+		ATshiftH <<= 1;
+	}
 }
 
 void incrementHorz()
 {
 	//Will wrap around when hitting edge of nametable space
-	uint8_t coarseX = currVRAM_addr & 0x1F;
+	/*uint8_t coarseX = currVRAM_addr & 0x1F;
 	coarseX = (coarseX+1) & 0x1F;
 	currVRAM_addr = (currVRAM_addr & ~0x1F) | (coarseX);
 	if((coarseX) == 0)
-		currVRAM_addr ^= 0x0400;
+		currVRAM_addr ^= 0x0400;*/
+	++currVRAM_addr.coarseX;
+	if(currVRAM_addr.coarseX == 0)
+		currVRAM_addr.value ^= 0x0400; //Swap NT bit
 }
 
 void incrementVert()
 {
+	/*
 	//Out of bounds coarseY should work correctly without additional logic
 	uint8_t fineY = (currVRAM_addr & 0x7000) >> 12;
 	uint8_t coarseY = (currVRAM_addr & 0x3E0) >> 5;
@@ -527,6 +565,13 @@ void incrementVert()
 		currVRAM_addr = (currVRAM_addr & ~0x3E0) | (coarseY << 5);
 		if(coarseY == 0) {
 			currVRAM_addr ^= 0x0800;
+		}
+	}*/
+	++currVRAM_addr.fineY;
+	if(currVRAM_addr.fineY == 0) { //Overflows into coarseY
+		++currVRAM_addr.coarseY;
+		if(currVRAM_addr.coarseY == 0) {
+			currVRAM_addr.value ^= 0x0800; //Swap NT bit
 		}
 	}
 }
