@@ -1,8 +1,12 @@
 #pragma once
 
 #include <stdint.h>
+#include <array>
 
 namespace PPU {
+
+extern unsigned int scanline;
+extern unsigned int dot; //Dots are also called cycles and can be considered the pixel column
 
 void init();
 void step();
@@ -16,7 +20,7 @@ void renderPixel();
 void incrementHorz();
 void incrementVert();
 uint8_t* getPixelMap();
-uint8_t* getPatternTableBuffers();
+std::array<std::array<uint8_t, 16*16*64>, 2> getPatternTableBuffers();
 bool isframeReady();
 void setframeReady(bool set);
 

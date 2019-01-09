@@ -4,15 +4,26 @@
 
 namespace CPU {
 
-extern bool alive;
+enum OpType {
+	//To change behavior of addressing modes which depend on type
+	//In terms of reading/writing to memory. Not internal registers or flags
+	READ,
+	WRITE,
+	READWRITE,
+};
 
-void init();
+extern bool alive;
+extern unsigned long long cycle;
+extern bool enableLogging;
+
+void init(bool logging = false);
 void step();
 void tick();
 long long getCycles();
 uint8_t memGet(uint16_t addr);
 void memSet(uint16_t addr, uint8_t val);
 void OAMDMA_write();
+void pollInterrupts();
 void triggerNMI();
 void triggerIRQ();
 void getStateString();
@@ -26,14 +37,15 @@ uint16_t ZeroPage();
 uint16_t ZeroPageX();
 uint16_t ZeroPageY();
 uint16_t Absolute();
-uint16_t AbsoluteX();
-uint16_t AbsoluteY();
+uint16_t AbsoluteX(OpType optype);
+uint16_t AbsoluteY(OpType optype);
 uint16_t Indirect();
 uint16_t IndirectX();
-uint16_t IndirectY();
+uint16_t IndirectY(OpType optype);
 
 //CPU operation functions
 void opADC(uint16_t addr);
+void opAHX(uint16_t addr);
 void opALR(uint16_t addr);
 void opANC(uint16_t addr);
 void opAND(uint16_t addr);
@@ -73,6 +85,7 @@ void opINY();
 void opISC(uint16_t addr);
 void opJMP(uint16_t addr);
 void opJSR(uint16_t addr);
+void opLAS(uint16_t addr);
 void opLAX(uint16_t addr);
 void opLDA();
 void opLDA(uint16_t addr);
@@ -82,7 +95,7 @@ void opLDY();
 void opLDY(uint16_t addr);
 void opLSR();
 void opLSR(uint16_t addr);
-void opNOP();
+void opNOP(uint16_t addr);
 void opORA(uint16_t addr);
 void opPHA();
 void opPHP();
@@ -101,16 +114,20 @@ void opSBC(uint16_t addr);
 void opSEC();
 void opSED();
 void opSEI();
+void opSHX(uint16_t addr);
+void opSHY(uint16_t addr);
 void opSLO(uint16_t addr);
 void opSRE(uint16_t addr);
 void opSTA(uint16_t addr);
 void opSTX(uint16_t addr);
 void opSTY(uint16_t addr);
+void opTAS(uint16_t addr);
 void opTAX();
 void opTAY();
 void opTSX();
 void opTXA();
 void opTXS();
 void opTYA();
+void opXAA(uint16_t addr);
 
 }

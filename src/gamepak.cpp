@@ -50,7 +50,7 @@ int init(std::ifstream &file) {
 	}
 
 	if(mapper == NULL) {
-		std::cout << "Unsupported mapper: " << mapperNum << std::endl;
+		std::cout << "Unsupported mapper: " << (int)mapperNum << std::endl;
 		return -1;
 	}
 

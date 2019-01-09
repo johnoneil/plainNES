@@ -21,9 +21,9 @@ int init()
     return 0;
 }
 
-uint32_t* convertNTSC2ARGB(uint32_t* outputBuffer, uint8_t* inputPixelMap)
+uint32_t* convertNTSC2ARGB(uint32_t* outputBuffer, uint8_t* inputPixelMap, int size)
 {
-    for(int i=0; i<240*256; ++i) {
+    for(int i=0; i<size; ++i) {
         outputBuffer[i] = NTSCkey[inputPixelMap[i]];
     }
     return outputBuffer;

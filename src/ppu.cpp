@@ -86,7 +86,7 @@ uint8_t OAMaddr;
 
 void init()
 {
-	scanline = 261;
+	scanline = 241; //To be consistant with nintendulator
 	dot = 0;
 	frame = 0;
 	ppuClock = 0;
@@ -106,7 +106,7 @@ void init()
 void step()
 {
 	//Check for skipped cycle. Occurs at 0,0 on odd frames when rendering enabled
-	if((scanline == 0) && (dot == 0) && (showBG || showSpr) && (frame % 2 == 1))
+	if((scanline == 261) && (dot == 339) && (showBG || showSpr) && (frame % 2 == 1))
 		dot++;
 
 	if(scanline == 241 && dot == 1) {
@@ -238,7 +238,7 @@ void regSet(uint16_t addr, uint8_t val)
 
 		case 0x2004: //OAMDATA
 			//Only write while not rendering
-			if((scanline >= 240) && (scanline != 261)) {
+			if(rendering == false || ((scanline >= 240) && (scanline != 261))) {
 				oam_data[OAMaddr] = val;
 				++OAMaddr;
 			}
@@ -362,7 +362,7 @@ void renderFrameStep()
 					//if(backgroundTileSel) BGtileaddr += 0x1000;
 					//BGHlatch = GAMEPAK::PPUmemGet(BGtileaddr + 8);
 					break;
-				case 0:
+				case 0:					
 					if(dot != 256)
 						incrementHorz();
 					else
@@ -554,19 +554,6 @@ void incrementHorz()
 
 void incrementVert()
 {
-	/*
-	//Out of bounds coarseY should work correctly without additional logic
-	uint8_t fineY = (currVRAM_addr & 0x7000) >> 12;
-	uint8_t coarseY = (currVRAM_addr & 0x3E0) >> 5;
-	fineY = (fineY + 1) & 7;
-	currVRAM_addr = (currVRAM_addr & ~0x7000) | (fineY << 12);
-	if(fineY == 0) {
-		coarseY = (coarseY + 1) & 0x1F;
-		currVRAM_addr = (currVRAM_addr & ~0x3E0) | (coarseY << 5);
-		if(coarseY == 0) {
-			currVRAM_addr ^= 0x0800;
-		}
-	}*/
 	++currVRAM_addr.fineY;
 	if(currVRAM_addr.fineY == 0) { //Overflows into coarseY
 		++currVRAM_addr.coarseY;
@@ -576,19 +563,38 @@ void incrementVert()
 	}
 }
 
-uint8_t* getPatternTableBuffers() //Used in displaying pattern tables for debugging
+std::array<std::array<uint8_t, 16*16*64>, 2> getPatternTableBuffers() //Used in displaying pattern tables for debugging
 {
-	/*uint8_t PTpixelMap[276 * 128];
-	uint16_t addr;
-	for(int tile=0; tile<256; ++tile) {
-		//Left table
-		addr = (tile << 4);
-		for(int row=0; row<8; ++row) {
-			PTpixelMap[]
-		}
-	}*/
+	std::array<uint8_t,4> palette;
+	for(int i=0; i<4; ++i)
+		palette[i] = getPalette(i);
 	
-	return NULL;
+	std::array<std::array<uint8_t, 16*16*64>, 2> PTpixelmap;
+	uint16_t addr, tilerowL, tilerowH;
+	for(int pixelRow=0; pixelRow<16*8; ++pixelRow) {
+		for(int tileCol=0; tileCol<16; ++tileCol) {
+			addr = ((pixelRow/8) << 8) | (tileCol << 4) | (pixelRow % 8);
+			tilerowL = GAMEPAK::PPUmemGet(addr);
+			tilerowH = GAMEPAK::PPUmemGet(addr+8);
+			for(int pixelCol=0; pixelCol<8; ++pixelCol) {
+				//uint8_t value = (((tilerowH >> (7-pixelCol))&1) << 1) | ((tilerowL >> (7-pixelCol))&1);
+				uint8_t value = palette[(((tilerowH >> (7-pixelCol))&1) << 1) | ((tilerowL >> (7-pixelCol))&1)];
+				PTpixelmap[0][pixelRow*16*8+tileCol*8+pixelCol] = value;
+			}
+		}
+	}
+	for(int pixelRow=0; pixelRow<16*8; ++pixelRow) {
+		for(int tileCol=0; tileCol<16; ++tileCol) {
+			addr = (((pixelRow/8) << 8) | (tileCol << 4) | (pixelRow % 8)) + 0x1000;
+			tilerowL = GAMEPAK::PPUmemGet(addr);
+			tilerowH = GAMEPAK::PPUmemGet(addr+8);
+			for(int pixelCol=0; pixelCol<8; ++pixelCol) {
+				uint8_t value = palette[(((tilerowH >> (7-pixelCol))&1) << 1) | ((tilerowL >> (7-pixelCol))&1)];
+				PTpixelmap[1][pixelRow*16*8+tileCol*8+pixelCol] = value;
+			}
+		}
+	}
+	return PTpixelmap;
 }
 
 uint8_t* getPixelMap()

@@ -9,9 +9,10 @@ Mapper1::Mapper1(GAMEPAK::iNES_Header header)
     CHR.resize(32, std::vector<uint8_t>(0x1000, 0));
 
 	//Assumed power on states
-	mirroringMode = PRGbankmode = CHRbankmode = 0;
+	mirroringMode = CHRbankmode = 0;
+	PRGbankmode = 3;
 	CHRbank0 = CHRbank1 = 0;
-	PRGbank = 0x1F; //From blargg tests http://forums.nesdev.com/viewtopic.php?t=6766
+	PRGbank = 0;
 	MMCshiftReg = 0;
 	writeCounter = 0;
 }

@@ -1,5 +1,6 @@
 #include "cpu.h"
 #include "ppu.h"
+#include "apu.h"
 #include "io.h"
 #include "gamepak.h"
 #include "utils.h"
@@ -10,11 +11,10 @@
 //#include <sstream>
 
 namespace CPU {
-	
 
 uint16_t PC;
 uint8_t SP, A, X, Y;
-bool NMI_req, IRQ_req, interruptOccured;
+bool NMI_request, IRQ_request, NMI_triggered, IRQ_triggered, interruptOccured;
 unsigned long long cycle;
 bool alive;
 
@@ -39,7 +39,7 @@ std::string opTxt;
 std::stringstream initVals;
 int memCnt;
 uint8_t memVals[3];
-std::ofstream logFile("log.txt",std::ios::trunc);
+std::ofstream logFile;
 bool enableLogging;
 
 
@@ -54,14 +54,20 @@ uint8_t memGet(uint16_t addr) {
 	else if(addr < 0x4000) {	//PPU registers or mirrored
 		return PPU::regGet(0x2000 + (addr % 8));
 	}
-	else if(addr < 0x4014) {	//IO (APU) memory
-		return IO::regGet(addr);
+	else if(addr < 0x4014) {	//APU registers
+		return APU::regGet(addr);
 	}
 	else if(addr == 0x4014) {	//OAMDMA register
 		return OAMDMA;
 	}
+	else if(addr < 0x4016) {	//APU registers
+		return APU::regGet(addr);
+	}
+	else if(addr < 0x4018) {	//IO registers
+		return IO::regGet(addr);
+	}
 	else if(addr < 0x4020) {
-		return IO::regGet(addr);	//More IO (APU) memory
+		return IO::regGet(addr);	//APU registers
 	}
 	else {
 		return GAMEPAK::CPUmemGet(addr);	//Gamepak memory
@@ -78,15 +84,21 @@ void memSet(uint16_t addr, uint8_t val) {
 	else if(addr < 0x4000) {	//PPU memory or mirrored
 		PPU::regSet(0x2000 + (addr % 8), val);
 	}
-	else if(addr < 0x4014) {	//IO (APU) memory
-		IO::regSet(addr, val);
+	else if(addr < 0x4014) {	//APU registers
+		APU::regSet(addr, val);
 	}
 	else if(addr == 0x4014) {	//OAMDMA register
 		OAMDMA = val;
 		OAMDMA_write();
 	}
+	else if(addr < 0x4016) {	//APU registers
+		APU::regSet(addr, val);
+	}
+	else if(addr < 0x4018) {	//IO registers
+		IO::regSet(addr, val);
+	}
 	else if(addr < 0x4020) {
-		IO::regSet(addr, val);	//More IO (APU) memory
+		APU::regSet(addr, val);	//APU registers
 	}
 	else {
 		GAMEPAK::CPUmemSet(addr, val);	//Gamepak memory
@@ -94,13 +106,18 @@ void memSet(uint16_t addr, uint8_t val) {
 }
 
 
-void init() {
-	enableLogging = false;
+void init(bool logging) {
+	if(logging) {
+		enableLogging = true;
+		logFile.open("log.txt",std::ios::trunc);
+	}
 	SP = 0xFD;
-	P.raw = 0x24;
+	P.raw = 0x34;
 	PC = memGet(0xFFFC) | memGet(0xFFFD) << 8;
 	PC_init = PC;
-	NMI_req = IRQ_req = interruptOccured = false;
+	NMI_request = NMI_triggered = false;
+	IRQ_request = IRQ_triggered = false;
+	interruptOccured = false;
 	cycle = 0;
 	for(int i = 0; i < 2048; ++i)
 		RAM[i] = 0;
@@ -112,7 +129,7 @@ void tick() {
 	PPU::step();
 	PPU::step();
 	PPU::step();
-	//APU::tick();
+	APU::step();
 }
 
 long long getCycles()
@@ -122,9 +139,9 @@ long long getCycles()
 
 void step() {
 	uint8_t opcode;
-	if(NMI_req | IRQ_req) {
+	if(NMI_triggered | IRQ_triggered) {
 		interruptOccured = true;
-		opcode = 0x00;
+		opcode = 0x00; //BRK
 		tick();
 	}
 	else {
@@ -156,11 +173,11 @@ void step() {
 			break;
 		case 0x7D:
 			if(enableLogging) opTxt = "ADC ";
-			opADC(AbsoluteX());
+			opADC(AbsoluteX(READ));
 			break;
 		case 0x79:
 			if(enableLogging) opTxt = "ADC ";
-			opADC(AbsoluteY());
+			opADC(AbsoluteY(READ));
 			break;
 		case 0x61:
 			if(enableLogging) opTxt = "ADC ";
@@ -168,7 +185,15 @@ void step() {
 			break;
 		case 0x71:
 			if(enableLogging) opTxt = "ADC ";
-			opADC(IndirectY());
+			opADC(IndirectY(READ));
+			break;
+		case 0x93:
+			if(enableLogging) opTxt = "AHX ";
+			opAHX(IndirectY(WRITE));
+			break;
+		case 0x9F:
+			if(enableLogging) opTxt = "AHX ";
+			opAHX(AbsoluteY(WRITE));
 			break;
 		case 0x4B:
 			if(enableLogging) opTxt = "ALR ";
@@ -200,11 +225,11 @@ void step() {
 			break;
 		case 0x3D:
 			if(enableLogging) opTxt = "AND ";
-			opAND(AbsoluteX());
+			opAND(AbsoluteX(READ));
 			break;
 		case 0x39:
 			if(enableLogging) opTxt = "AND ";
-			opAND(AbsoluteY());
+			opAND(AbsoluteY(READ));
 			break;
 		case 0x21:
 			if(enableLogging) opTxt = "AND ";
@@ -212,7 +237,7 @@ void step() {
 			break;
 		case 0x31:
 			if(enableLogging) opTxt = "AND ";
-			opAND(IndirectY());
+			opAND(IndirectY(READ));
 			break;
 		case 0x6B:
 			if(enableLogging) opTxt = "ARR ";
@@ -236,7 +261,7 @@ void step() {
 			break;
 		case 0x1E:
 			if(enableLogging) opTxt = "ASL ";
-			opASL(AbsoluteX());
+			opASL(AbsoluteX(READWRITE));
 			break;
 		case 0xCB:
 			if(enableLogging) opTxt = "AXS ";
@@ -320,11 +345,11 @@ void step() {
 			break;
 		case 0xDD:
 			if(enableLogging) opTxt = "CMP ";
-			opCMP(AbsoluteX());
+			opCMP(AbsoluteX(READ));
 			break;
 		case 0xD9:
 			if(enableLogging) opTxt = "CMP ";
-			opCMP(AbsoluteY());
+			opCMP(AbsoluteY(READ));
 			break;
 		case 0xC1:
 			if(enableLogging) opTxt = "CMP ";
@@ -332,7 +357,7 @@ void step() {
 			break;
 		case 0xD1:
 			if(enableLogging) opTxt = "CMP ";
-			opCMP(IndirectY());
+			opCMP(IndirectY(READ));
 			break;
 		case 0xE0:
 			if(enableLogging) opTxt = "CPX ";
@@ -372,7 +397,7 @@ void step() {
 			break;
 		case 0xD3:
 			if(enableLogging) opTxt = "DCP ";
-			opDCP(IndirectY());
+			opDCP(IndirectY(READWRITE));
 			break;
 		case 0xD7:
 			if(enableLogging) opTxt = "DCP ";
@@ -380,11 +405,11 @@ void step() {
 			break;
 		case 0xDB:
 			if(enableLogging) opTxt = "DCP ";
-			opDCP(AbsoluteY());
+			opDCP(AbsoluteY(READWRITE));
 			break;
 		case 0xDF:
 			if(enableLogging) opTxt = "DCP ";
-			opDCP(AbsoluteX());
+			opDCP(AbsoluteX(READWRITE));
 			break;	
 		case 0xC6:
 			if(enableLogging) opTxt = "DEC ";
@@ -400,7 +425,7 @@ void step() {
 			break;
 		case 0xDE:
 			if(enableLogging) opTxt = "DEC ";
-			opDEC(AbsoluteX());
+			opDEC(AbsoluteX(READWRITE));
 			break;
 		case 0xCA:
 			if(enableLogging) opTxt = "DEX ";
@@ -428,11 +453,11 @@ void step() {
 			break;
 		case 0x5D:
 			if(enableLogging) opTxt = "EOR ";
-			opEOR(AbsoluteX());
+			opEOR(AbsoluteX(READ));
 			break;
 		case 0x59:
 			if(enableLogging) opTxt = "EOR ";
-			opEOR(AbsoluteY());
+			opEOR(AbsoluteY(READ));
 			break;
 		case 0x41:
 			if(enableLogging) opTxt = "EOR ";
@@ -440,7 +465,7 @@ void step() {
 			break;
 		case 0x51:
 			if(enableLogging) opTxt = "EOR ";
-			opEOR(IndirectY());
+			opEOR(IndirectY(READ));
 			break;
 		case 0xE6:
 			if(enableLogging) opTxt = "INC ";
@@ -456,7 +481,7 @@ void step() {
 			break;
 		case 0xFE:
 			if(enableLogging) opTxt = "INC ";
-			opINC(AbsoluteX());
+			opINC(AbsoluteX(READWRITE));
 			break;
 		case 0xE8:
 			if(enableLogging) opTxt = "INX ";
@@ -480,7 +505,7 @@ void step() {
 			break;
 		case 0xF3:
 			if(enableLogging) opTxt = "ISC ";
-			opISC(IndirectY());
+			opISC(IndirectY(READWRITE));
 			break;
 		case 0xF7:
 			if(enableLogging) opTxt = "ISC ";
@@ -488,11 +513,11 @@ void step() {
 			break;
 		case 0xFB:
 			if(enableLogging) opTxt = "ISC ";
-			opISC(AbsoluteY());
+			opISC(AbsoluteY(READWRITE));
 			break;
 		case 0xFF:
 			if(enableLogging) opTxt = "ISC ";
-			opISC(AbsoluteX());
+			opISC(AbsoluteX(READWRITE));
 			break;	
 		case 0x4C:
 			if(enableLogging) opTxt = "JMP ";
@@ -501,6 +526,8 @@ void step() {
 		case 0x6C:
 			if(enableLogging) opTxt = "JMP ";
 			opJMP(Indirect());
+			tick();
+			tick();
 			break;
 		case 0x20:
 			if(enableLogging) opTxt = "JSR ";
@@ -510,6 +537,10 @@ void step() {
 		case 0x62: case 0x72: case 0x92: case 0xB2: case 0xD2: case 0xF2:
 			if(enableLogging) opTxt = "KIL ";
 			alive = false;
+			break;
+		case 0xBB:
+			if(enableLogging) opTxt = "LAS ";
+			opLAS(AbsoluteY(READ));
 			break;
 		case 0xA3:
 			if(enableLogging) opTxt = "LAX ";
@@ -521,7 +552,7 @@ void step() {
 			break;
 		case 0xAB:
 			if(enableLogging) opTxt = "LAX ";
-			opLAX(Indirect());
+			opLAX(Immediate());
 			break;
 		case 0xAF:
 			if(enableLogging) opTxt = "LAX ";
@@ -529,7 +560,7 @@ void step() {
 			break;
 		case 0xB3:
 			if(enableLogging) opTxt = "LAX ";
-			opLAX(IndirectY());
+			opLAX(IndirectY(READ));
 			break;
 		case 0xB7:
 			if(enableLogging) opTxt = "LAX ";
@@ -537,7 +568,7 @@ void step() {
 			break;
 		case 0xBF:
 			if(enableLogging) opTxt = "LAX ";
-			opLAX(AbsoluteY());
+			opLAX(AbsoluteY(READ));
 			break;
 		case 0xA9:
 			if(enableLogging) opTxt = "LDA ";
@@ -557,11 +588,11 @@ void step() {
 			break;
 		case 0xBD:
 			if(enableLogging) opTxt = "LDA ";
-			opLDA(AbsoluteX());
+			opLDA(AbsoluteX(READ));
 			break;
 		case 0xB9:
 			if(enableLogging) opTxt = "LDA ";
-			opLDA(AbsoluteY());
+			opLDA(AbsoluteY(READ));
 			break;
 		case 0xA1:
 			if(enableLogging) opTxt = "LDA ";
@@ -569,7 +600,7 @@ void step() {
 			break;
 		case 0xB1:
 			if(enableLogging) opTxt = "LDA ";
-			opLDA(IndirectY());
+			opLDA(IndirectY(READ));
 			break;
 		case 0xA2:
 			if(enableLogging) opTxt = "LDX ";
@@ -589,7 +620,7 @@ void step() {
 			break;
 		case 0xBE:
 			if(enableLogging) opTxt = "LDX ";
-			opLDX(AbsoluteY());
+			opLDX(AbsoluteY(READ));
 			break;
 		case 0xA0:
 			if(enableLogging) opTxt = "LDY ";
@@ -609,7 +640,7 @@ void step() {
 			break;
 		case 0xBC:
 			if(enableLogging) opTxt = "LDY ";
-			opLDY(AbsoluteX());
+			opLDY(AbsoluteX(READ));
 			break;
 		case 0x4A:
 			if(enableLogging) opTxt = "LSR ";
@@ -629,36 +660,31 @@ void step() {
 			break;
 		case 0x5E:
 			if(enableLogging) opTxt = "LSR ";
-			opLSR(AbsoluteX());
+			opLSR(AbsoluteX(READWRITE));
 			break;
 		case 0x1A: case 0x3A: case 0x5A: case 0x7A: case 0xDA: case 0xEA: case 0xFA:
 			if(enableLogging) opTxt = "NOP ";
-			opNOP();
+			opNOP(PC);
 			break;
 		case 0x80: case 0x82: case 0xC2: case 0xE2: case 0x89:
 			if(enableLogging) opTxt = "NOP ";
-			Immediate();
-			opNOP();
+			opNOP(Immediate());
 			break;
 		case 0x04: case 0x44: case 0x64:
 			if(enableLogging) opTxt = "NOP ";
-			ZeroPage();
-			opNOP();
+			opNOP(ZeroPage());
 			break;
 		case 0x0C:
 			if(enableLogging) opTxt = "NOP ";
-			Absolute();
-			opNOP();
+			opNOP(Absolute());
 			break;
 		case 0x1C: case 0x3C: case 0x5C: case 0x7C: case 0xDC: case 0xFC:
 			if(enableLogging) opTxt = "NOP ";
-			AbsoluteX();
-			opNOP();
+			opNOP(AbsoluteX(READ));
 			break;
 		case 0x14: case 0x34: case 0x54: case 0x74: case 0xD4: case 0xF4:
 			if(enableLogging) opTxt = "NOP ";
-			ZeroPageX();
-			opNOP();
+			opNOP(ZeroPageX());
 			break;
 		case 0x09:
 			if(enableLogging) opTxt = "ORA ";
@@ -678,11 +704,11 @@ void step() {
 			break;
 		case 0x1D:
 			if(enableLogging) opTxt = "ORA ";
-			opORA(AbsoluteX());
+			opORA(AbsoluteX(READ));
 			break;
 		case 0x19:
 			if(enableLogging) opTxt = "ORA ";
-			opORA(AbsoluteY());
+			opORA(AbsoluteY(READ));
 			break;
 		case 0x01:
 			if(enableLogging) opTxt = "ORA ";
@@ -690,7 +716,7 @@ void step() {
 			break;
 		case 0x11:
 			if(enableLogging) opTxt = "ORA ";
-			opORA(IndirectY());
+			opORA(IndirectY(READ));
 			break;
 		case 0x48:
 			if(enableLogging) opTxt = "PHA ";
@@ -722,7 +748,7 @@ void step() {
 			break;
 		case 0x33:
 			if(enableLogging) opTxt = "RLA ";
-			opRLA(IndirectY());
+			opRLA(IndirectY(READWRITE));
 			break;
 		case 0x37:
 			if(enableLogging) opTxt = "RLA ";
@@ -730,11 +756,11 @@ void step() {
 			break;
 		case 0x3B:
 			if(enableLogging) opTxt = "RLA ";
-			opRLA(AbsoluteY());
+			opRLA(AbsoluteY(READWRITE));
 			break;
 		case 0x3F:
 			if(enableLogging) opTxt = "RLA ";
-			opRLA(AbsoluteX());
+			opRLA(AbsoluteX(READWRITE));
 			break;
 		case 0x2A:
 			if(enableLogging) opTxt = "ROL ";
@@ -754,7 +780,7 @@ void step() {
 			break;
 		case 0x3E:
 			if(enableLogging) opTxt = "ROL ";
-			opROL(AbsoluteX());
+			opROL(AbsoluteX(READWRITE));
 			break;
 		case 0x6A:
 			if(enableLogging) opTxt = "ROR ";
@@ -774,7 +800,7 @@ void step() {
 			break;
 		case 0x7E:
 			if(enableLogging) opTxt = "ROR ";
-			opROR(AbsoluteX());
+			opROR(AbsoluteX(READWRITE));
 			break;
 		case 0x63:
 			if(enableLogging) opTxt = "RRA ";
@@ -790,7 +816,7 @@ void step() {
 			break;
 		case 0x73:
 			if(enableLogging) opTxt = "RRA ";
-			opRRA(IndirectY());
+			opRRA(IndirectY(READWRITE));
 			break;
 		case 0x77:
 			if(enableLogging) opTxt = "RRA ";
@@ -798,11 +824,11 @@ void step() {
 			break;
 		case 0x7B:
 			if(enableLogging) opTxt = "RRA ";
-			opRRA(AbsoluteY());
+			opRRA(AbsoluteY(READWRITE));
 			break;
 		case 0x7F:
 			if(enableLogging) opTxt = "RRA ";
-			opRRA(AbsoluteX());
+			opRRA(AbsoluteX(READWRITE));
 			break;	
 		case 0x40:
 			if(enableLogging) opTxt = "RTI ";
@@ -850,11 +876,11 @@ void step() {
 			break;
 		case 0xFD:
 			if(enableLogging) opTxt = "SBC ";
-			opSBC(AbsoluteX());
+			opSBC(AbsoluteX(READ));
 			break;
 		case 0xF9:
 			if(enableLogging) opTxt = "SBC ";
-			opSBC(AbsoluteY());
+			opSBC(AbsoluteY(READ));
 			break;
 		case 0xE1:
 			if(enableLogging) opTxt = "SBC ";
@@ -862,7 +888,7 @@ void step() {
 			break;
 		case 0xF1:
 			if(enableLogging) opTxt = "SBC ";
-			opSBC(IndirectY());
+			opSBC(IndirectY(READ));
 			break;
 		case 0x38:
 			if(enableLogging) opTxt = "SEC ";
@@ -875,6 +901,14 @@ void step() {
 		case 0x78:
 			if(enableLogging) opTxt = "SEI ";
 			opSEI();
+			break;
+		case 0x9E:
+			if(enableLogging) opTxt = "SHX ";
+			opSHX(AbsoluteY(WRITE));
+			break;
+		case 0x9C:
+			if(enableLogging) opTxt = "SHY ";
+			opSHY(AbsoluteX(WRITE));
 			break;
 		case 0x03:
 			if(enableLogging) opTxt = "SLO ";
@@ -890,7 +924,7 @@ void step() {
 			break;
 		case 0x13:
 			if(enableLogging) opTxt = "SLO ";
-			opSLO(IndirectY());
+			opSLO(IndirectY(READWRITE));
 			break;
 		case 0x17:
 			if(enableLogging) opTxt = "SLO ";
@@ -898,11 +932,11 @@ void step() {
 			break;
 		case 0x1B:
 			if(enableLogging) opTxt = "SLO ";
-			opSLO(AbsoluteY());
+			opSLO(AbsoluteY(READWRITE));
 			break;
 		case 0x1F:
 			if(enableLogging) opTxt = "SLO ";
-			opSLO(AbsoluteX());
+			opSLO(AbsoluteX(READWRITE));
 			break;
 		case 0x43:
 			if(enableLogging) opTxt = "SRE ";
@@ -918,7 +952,7 @@ void step() {
 			break;
 		case 0x53:
 			if(enableLogging) opTxt = "SRE ";
-			opSRE(IndirectY());
+			opSRE(IndirectY(READWRITE));
 			break;
 		case 0x57:
 			if(enableLogging) opTxt = "SRE ";
@@ -926,11 +960,11 @@ void step() {
 			break;
 		case 0x5B:
 			if(enableLogging) opTxt = "SRE ";
-			opSRE(AbsoluteY());
+			opSRE(AbsoluteY(READWRITE));
 			break;
 		case 0x5F:
 			if(enableLogging) opTxt = "SRE ";
-			opSRE(AbsoluteX());
+			opSRE(AbsoluteX(READWRITE));
 			break;
 		case 0x85:
 			if(enableLogging) opTxt = "STA ";
@@ -946,11 +980,11 @@ void step() {
 			break;
 		case 0x9D:
 			if(enableLogging) opTxt = "STA ";
-			opSTA(AbsoluteX());
+			opSTA(AbsoluteX(WRITE));
 			break;
 		case 0x99:
 			if(enableLogging) opTxt = "STA ";
-			opSTA(AbsoluteY());
+			opSTA(AbsoluteY(WRITE));
 			break;
 		case 0x81:
 			if(enableLogging) opTxt = "STA ";
@@ -958,7 +992,7 @@ void step() {
 			break;
 		case 0x91:
 			if(enableLogging) opTxt = "STA ";
-			opSTA(IndirectY());
+			opSTA(IndirectY(WRITE));
 			break;
 		case 0x86:
 			if(enableLogging) opTxt = "STX ";
@@ -984,6 +1018,10 @@ void step() {
 			if(enableLogging) opTxt = "STY ";
 			opSTY(Absolute());
 			break;
+		case 0x9B:
+			if(enableLogging) opTxt = "TAS ";
+			opTAS(AbsoluteX(WRITE));
+			break;
 		case 0xAA:
 			if(enableLogging) opTxt = "TAX ";
 			opTAX();
@@ -1008,6 +1046,10 @@ void step() {
 			if(enableLogging) opTxt = "TYA ";
 			opTYA();
 			break;
+		case 0x8B:
+			if(enableLogging) opTxt = "XAA ";
+			opXAA(Immediate());
+			break;
 		default:
 			std::cout << std::hex << std::uppercase;
 			std::cout << std::setw(4) << static_cast<int>(PC-1) << ": "
@@ -1016,10 +1058,19 @@ void step() {
 			//throw 1;
 			break;
 	}
+
 	if(interruptOccured)
 		interruptOccured = false;
 	else if(enableLogging)
 		logStep();
+
+}
+
+void pollInterrupts() {
+	if(NMI_request)
+		NMI_triggered = true;
+	else if(IRQ_request && P.b.I == 0)
+		IRQ_triggered = true;
 }
 
 
@@ -1038,11 +1089,11 @@ void OAMDMA_write() {
 }
 
 void triggerNMI() {
-	NMI_req = true;
+	NMI_request = true;
 }
 
 void triggerIRQ() {
-	IRQ_req = true;
+	IRQ_request = true;
 }
 
 void setPC(uint16_t newPC) {
@@ -1057,8 +1108,8 @@ void getStateString() {
 		<< " Y:" << std::setw(2) << static_cast<int>(Y)
 		<< " P:" << std::setw(2) << static_cast<int>(P.raw)
 		<< " SP:" << std::setw(2) << static_cast<int>(SP)
-		<< " CYC:" << std::dec << std::setfill(' ') << std::setw(3) << 0
-		<< " SL:" << std::setw(3) << 0;
+		<< " CYC:" << std::dec << std::setfill(' ') << std::setw(3) << PPU::dot
+		<< " SL:" << std::setw(3) << PPU::scanline;
 }
 
 void logStep() {
@@ -1115,6 +1166,7 @@ uint16_t ZeroPageX() {
 	memCnt = 2;
 	++PC;
 	tick();
+	memGet(addr); //Dummy read
 	addr += X;
 	tick();
 	if(enableLogging) opTxt += "$" + int_to_hex(memVals[1]) + ",X @ " + int_to_hex(addr);
@@ -1127,6 +1179,7 @@ uint16_t ZeroPageY() {
 	memCnt = 2;
 	++PC;
 	tick();
+	memGet(addr); //Dummy read
 	addr += Y;
 	tick();
 	if(enableLogging) opTxt += "$" + int_to_hex(memVals[1]) + ",Y @ " + int_to_hex(addr);
@@ -1148,7 +1201,7 @@ uint16_t Absolute() {
 	return addr;
 }
 
-uint16_t AbsoluteX() {
+uint16_t AbsoluteX(OpType optype) {
 	uint16_t addr = memGet(PC);
 	memVals[1] = static_cast<uint8_t>(addr);
 	++PC;
@@ -1159,15 +1212,25 @@ uint16_t AbsoluteX() {
 	addr |= addr2;
 	++PC;
 	tick();
-	if (((addr&0x0F) + X) > 0x0F)
-		tick();
 	if(enableLogging) opTxt += "$" + int_to_hex(addr) + ",X @ ";
+
+	if(optype == READ) {
+		if (((addr&0xFF) + X) > 0xFF) {
+			memGet(((uint16_t)addr2 << 8) | ((uint8_t)(addr+X))); //Dummy read
+			tick();
+		}
+	}
+	else if(optype == WRITE || optype == READWRITE) {
+		memGet(((uint16_t)addr2 << 8) | ((uint8_t)(addr+X))); //Dummy read
+		tick();
+	}
+	
 	addr += X;	
 	if(enableLogging) opTxt += int_to_hex(addr);
 	return addr;
 }
 
-uint16_t AbsoluteY() {
+uint16_t AbsoluteY(OpType optype) {
 	uint16_t addr = memGet(PC);
 	memVals[1] = static_cast<uint8_t>(addr);
 	++PC;
@@ -1178,11 +1241,21 @@ uint16_t AbsoluteY() {
 	addr |= addr2;
 	++PC;
 	tick();
-	if (((addr&0x0F) + Y) > 0x0F)
-		tick();
 	if(enableLogging) opTxt += "$" + int_to_hex(addr) + ",Y @ ";
-	addr += Y;
-	if(enableLogging) opTxt += int_to_hex(addr);	
+
+	if(optype == READ) {
+		if (((addr&0xFF) + Y) > 0xFF) {
+			memGet(((uint16_t)addr2 << 8) | ((uint8_t)(addr+Y))); //Dummy read
+			tick();
+		}
+	}
+	else if(optype == WRITE || optype == READWRITE) {
+		memGet(((uint16_t)addr2 << 8) | ((uint8_t)(addr+Y))); //Dummy read
+		tick();
+	}
+	
+	addr += Y;	
+	if(enableLogging) opTxt += int_to_hex(addr);
 	return addr;
 }
 
@@ -1210,6 +1283,7 @@ uint16_t IndirectX() {
 	memCnt = 2;
 	++PC;
 	tick();
+	memGet(iaddr); //Dummy read
 	iaddr += X;
 	tick();
 	uint16_t addr = memGet(iaddr);
@@ -1220,7 +1294,7 @@ uint16_t IndirectX() {
 	return addr;
 }
 
-uint16_t IndirectY() {
+uint16_t IndirectY(OpType optype) {
 	uint8_t iaddr = memGet(PC);
 	memVals[1] = static_cast<uint8_t>(iaddr);
 	memCnt = 2;
@@ -1230,8 +1304,17 @@ uint16_t IndirectY() {
 	tick();
 	addr |= ((uint16_t)memGet((uint8_t)(iaddr+1)) << 8);
 	tick();
-	if (((addr&0x0F) + Y) > 0x0F)
+	if(optype == READ) {
+		if (((addr&0xFF) + Y) > 0xFF) {
+			memGet((addr & 0xFF00) | (((uint8_t)(addr))+Y)); //Dummy read
+			tick();
+		}
+	}
+	else if(optype == WRITE || optype == READWRITE) {
+		memGet((addr & 0xFF00) | (((uint8_t)(addr))+Y)); //Dummy read
 		tick();
+	}
+	
 	if(enableLogging) opTxt += "($" + int_to_hex(memVals[1]) + "),Y = " + int_to_hex(addr) + " @ ";
 	addr += Y;
 	if(enableLogging) opTxt += int_to_hex(addr);
@@ -1247,27 +1330,35 @@ void opADC(uint16_t addr) {
 	tick();
 	uint8_t oldA = A;
 	A += M + P.b.C;
-	P.b.C = (A < oldA);
+	P.b.C = (A <= oldA);
 	P.b.V = ((oldA^A)&(M^A)&0x80) != 0;
 	P.b.Z = (A == 0);
 	P.b.N = (A >> 7) == 1;
+	pollInterrupts();
+}
+
+void opAHX(uint16_t addr) {
+	uint8_t val = A & X & (addr >> 8);
+	pollInterrupts();
+	tick();
+	memSet(addr, val);
 }
 
 void opALR(uint16_t addr) {
 	uint8_t M = memGet(addr);
+	pollInterrupts();
 	tick();
 	A &= M;
-	tick();
 	P.b.C = M & 1;
 	M = M >> 1;
 	memSet(addr, M);
 	P.b.Z = (M == 0);
 	P.b.N = (M >> 7) > 0;
-	tick();
 }
 
 void opANC(uint16_t addr) {
 	uint8_t M = memGet(addr);
+	pollInterrupts();
 	tick();
 	A &= M;
 	P.b.Z = (A == 0);
@@ -1278,6 +1369,7 @@ void opANC(uint16_t addr) {
 void opAND(uint16_t addr) {
 	uint8_t M = memGet(addr);
 	if(enableLogging) opTxt += int_to_hex(M);
+	pollInterrupts();
 	tick();
 	A &= M;
 	P.b.Z = (A == 0);
@@ -1286,9 +1378,9 @@ void opAND(uint16_t addr) {
 
 void opARR(uint16_t addr) {
 	uint8_t M = memGet(addr);
+	pollInterrupts();
 	tick();
 	A &= M;
-	tick();
 	uint8_t C0 = P.b.C;
 	P.b.C = (M & 1);
 	M = M >> 1;
@@ -1296,7 +1388,6 @@ void opARR(uint16_t addr) {
 	memSet(addr, M);
 	P.b.Z = (M == 0);
 	P.b.N = (A >> 7) > 0;
-	tick();
 }
 
 void opASL() {
@@ -1304,6 +1395,7 @@ void opASL() {
 	A = A << 1;
 	P.b.Z = (A == 0);
 	P.b.N = (A >> 7) > 0;
+	pollInterrupts();
 	tick();
 }
 
@@ -1311,16 +1403,20 @@ void opASL(uint16_t addr) {
 	uint8_t M = memGet(addr);
 	if(enableLogging) opTxt += int_to_hex(M);
 	tick();
+	memSet(addr, M); //Dummy write
+	tick();
 	P.b.C = (M >> 7) > 0;
 	M = M << 1;
 	P.b.Z = (A == 0);
 	P.b.N = (M >> 7) > 0;
 	memSet(addr, M);
 	tick();
+	pollInterrupts();
 }
 
 void opAXS(uint16_t addr) {
 	memSet(addr, A&X);
+	pollInterrupts();
 	tick();
 }
 
@@ -1331,11 +1427,13 @@ void opBCC() {
 	++PC;
 	tick();
 	if(P.b.C == 0) {
-		if (((PC&0x0F) + delta) > 0x0F)
-			tick();
+		uint16_t oldPC = PC;
 		PC += delta;
+		if((oldPC & 0xFF00) != (PC & 0xFF00))
+			tick(); //Moved to different page
 		tick();
 	}
+	pollInterrupts();
 }
 
 void opBCS() {
@@ -1345,11 +1443,13 @@ void opBCS() {
 	++PC;
 	tick();
 	if(P.b.C) {
-		if (((PC&0x0F) + delta) > 0x0F)
-			tick();
+		uint16_t oldPC = PC;
 		PC += delta;
+		if((oldPC & 0xFF00) != (PC & 0xFF00))
+			tick(); //Moved to different page
 		tick();
 	}
+	pollInterrupts();
 }
 
 void opBEQ() {
@@ -1359,17 +1459,20 @@ void opBEQ() {
 	++PC;
 	tick();
 	if(P.b.Z) {
-		if (((PC&0x0F) + delta) > 0x0F)
-			tick();
+		uint16_t oldPC = PC;
 		PC += delta;
+		if((oldPC & 0xFF00) != (PC & 0xFF00))
+			tick(); //Moved to different page
 		tick();
 	}
+	pollInterrupts();
 }
 
 void opBIT(uint16_t addr) {
+	tick();
+	pollInterrupts();
 	uint8_t M = memGet(addr);
 	if(enableLogging) opTxt += int_to_hex(M);
-	tick();
 	P.b.Z = (A & M) == 0;
 	P.b.N = (M & 1<<7) != 0;
 	P.b.V = (M & 1<<6) != 0;
@@ -1382,11 +1485,13 @@ void opBMI() {
 	++PC;
 	tick();
 	if(P.b.N) {
-		if (((PC&0x0F) + delta) > 0x0F)
-			tick();
+		uint16_t oldPC = PC;
 		PC += delta;
+		if((oldPC & 0xFF00) != (PC & 0xFF00))
+			tick(); //Moved to different page
 		tick();
 	}
+	pollInterrupts();
 }
 
 void opBNE() {
@@ -1396,11 +1501,13 @@ void opBNE() {
 	++PC;
 	tick();
 	if(P.b.Z == 0) {
-		if (((PC&0x0F) + delta) > 0x0F)
-			tick();
+		uint16_t oldPC = PC;
 		PC += delta;
+		if((oldPC & 0xFF00) != (PC & 0xFF00))
+			tick(); //Moved to different page
 		tick();
 	}
+	pollInterrupts();
 }
 
 void opBPL() {
@@ -1410,31 +1517,18 @@ void opBPL() {
 	++PC;
 	tick();
 	if(P.b.N == 0) {
-		if (((PC&0x0F) + delta) > 0x0F)
-			tick();
+		uint16_t oldPC = PC;
 		PC += delta;
+		if((oldPC & 0xFF00) != (PC & 0xFF00))
+			tick(); //Moved to different page
 		tick();
 	}
+	pollInterrupts();
 }
 
 void opBRK() {
 	uint16_t newaddr;
 	uint8_t bFlag;
-	if(NMI_req) {
-		newaddr = 0xFFFA;
-		bFlag = 0x20;
-		NMI_req = false;
-	}
-	else if(IRQ_req) {
-		newaddr = 0xFFFE;
-		bFlag = 0x20;
-		IRQ_req = false;
-	}
-	else {
-		newaddr = 0xFFFE;
-		bFlag = 0x30;
-		++PC;
-	}
 
 	memSet(((uint16_t)0x01 << 8) | SP, PC >> 8);
 	--SP;
@@ -1442,6 +1536,22 @@ void opBRK() {
 	memSet(((uint16_t)0x01 << 8) | SP, PC);
 	--SP;
 	tick();
+	//Will catch interrupts here
+	if(NMI_triggered || NMI_request) {
+		newaddr = 0xFFFA;
+		bFlag = 0x20;
+		NMI_request = NMI_triggered = false;
+	}
+	else if(IRQ_triggered || IRQ_request) {
+		newaddr = 0xFFFE;
+		bFlag = 0x20;
+		IRQ_triggered = false;
+	}
+	else {
+		newaddr = 0xFFFE;
+		bFlag = 0x30;
+		++PC;
+	}
 	memSet(((uint16_t)0x01 << 8) | SP, P.raw | bFlag);
 	P.b.I = 1;
 	--SP;
@@ -1452,6 +1562,7 @@ void opBRK() {
 	tick();
 	PC = addr;
 	tick();
+	pollInterrupts();
 }
 
 void opBVC()  {
@@ -1461,11 +1572,13 @@ void opBVC()  {
 	++PC;
 	tick();
 	if(P.b.V == 0) {
-		if (((PC&0x0F) + delta) > 0x0F)
-			tick();
+		uint16_t oldPC = PC;
 		PC += delta;
+		if((oldPC & 0xFF00) != (PC & 0xFF00))
+			tick(); //Moved to different page
 		tick();
 	}
+	pollInterrupts();
 }
 
 void opBVS() {
@@ -1475,34 +1588,41 @@ void opBVS() {
 	++PC;
 	tick();
 	if(P.b.V) {
-		if (((PC&0x0F) + delta) > 0x0F)
-			tick();
+		uint16_t oldPC = PC;
 		PC += delta;
+		if((oldPC & 0xFF00) != (PC & 0xFF00))
+			tick(); //Moved to different page
 		tick();
 	}
+	pollInterrupts();
 }
 
 void opCLC() {
+	pollInterrupts();
 	P.b.C = 0;
 	tick();
 }
 
 void opCLD() {
+	pollInterrupts();
 	P.b.D = 0;
 	tick();
 }
 
 void opCLI() {
+	pollInterrupts();
 	P.b.I = 0;
 	tick();
 }
 
 void opCLV() {
+	pollInterrupts();
 	P.b.V = 0;
 	tick();
 }
 
 void opCMP(uint8_t M) {
+	pollInterrupts();
 	P.b.C = (A >= M);
 	P.b.Z = (A == M);
 	P.b.N = ((uint8_t)(A-M)>>7) == 1;
@@ -1510,16 +1630,18 @@ void opCMP(uint8_t M) {
 }
 
 void opCMP(uint16_t addr) {
+	pollInterrupts();
 	uint8_t M = memGet(addr);
 	if(enableLogging) opTxt += int_to_hex(M);
 	tick();
 	P.b.C = (A >= M);
 	P.b.Z = (A == M);
 	P.b.N = ((uint8_t)(A-M)>>7) == 1;
-	tick();
+	//tick();
 }
 
 void opCPX(uint8_t M) {
+	pollInterrupts();
 	if(enableLogging) opTxt += int_to_hex(M);
 	P.b.C = (X >= M);
 	P.b.Z = (X == M);
@@ -1528,16 +1650,17 @@ void opCPX(uint8_t M) {
 }
 
 void opCPX(uint16_t addr) {
+	pollInterrupts();
 	uint8_t M = memGet(addr);
 	if(enableLogging) opTxt += int_to_hex(M);
 	tick();
 	P.b.C = (X >= M);
 	P.b.Z = (X == M);
 	P.b.N = ((uint8_t)(X-M)>>7) == 1;
-	tick();
 }
 
 void opCPY(uint8_t M) {
+	pollInterrupts();
 	if(enableLogging) opTxt += int_to_hex(M);
 	P.b.C = (Y >= M);
 	P.b.Z = (Y == M);
@@ -1546,13 +1669,13 @@ void opCPY(uint8_t M) {
 }
 
 void opCPY(uint16_t addr) {
+	pollInterrupts();
 	uint8_t M = memGet(addr);
 	if(enableLogging) opTxt += int_to_hex(M);
 	tick();
 	P.b.C = (Y >= M);
 	P.b.Z = (Y == M);
 	P.b.N = ((uint8_t)(Y-M)>>7) == 1;
-	tick();
 }
 
 void opDCP(uint16_t addr) {
@@ -1561,12 +1684,11 @@ void opDCP(uint16_t addr) {
 	M -= 1;
 	memSet(addr, M);
 	tick();
-	tick();
-	tick();
 	P.b.C = (A >= M);
 	P.b.Z = (A == M);
 	P.b.N = ((uint8_t)(A-M)>>7) == 1;
 	tick();
+	pollInterrupts();
 }
 
 void opDEC(uint16_t addr) {
@@ -1579,9 +1701,11 @@ void opDEC(uint16_t addr) {
 	P.b.Z = (M == 0);
 	P.b.N = (M >> 7) > 0;
 	tick();
+	pollInterrupts();
 }
 
 void opDEX() {
+	pollInterrupts();
 	X -= 1;
 	P.b.Z = (X == 0);
 	P.b.N = (X >> 7) > 0;
@@ -1589,6 +1713,7 @@ void opDEX() {
 }
 
 void opDEY() {
+	pollInterrupts();
 	Y -= 1;
 	P.b.Z = (Y == 0);
 	P.b.N = (Y >> 7) > 0;
@@ -1596,6 +1721,7 @@ void opDEY() {
 }
 
 void opEOR(void) {
+	pollInterrupts();
 	uint8_t M = memGet(PC);
 	if(enableLogging) opTxt += int_to_hex(M);
 	A ^= M;
@@ -1605,6 +1731,7 @@ void opEOR(void) {
 }
 
 void opEOR(uint16_t addr) {
+	pollInterrupts();
 	uint8_t M = memGet(addr);
 	if(enableLogging) opTxt += int_to_hex(M);
 	A ^= M;
@@ -1623,33 +1750,33 @@ void opINC(uint16_t addr) {
 	P.b.Z = (M == 0);
 	P.b.N = (M >> 7) > 0;
 	tick();
+	pollInterrupts();
 }
 
 void opINX() {
+	pollInterrupts();
 	X += 1;
 	tick();
 	P.b.Z = (X == 0);
 	P.b.N = (X >> 7) > 0;
-	tick();
 }
 
 void opINY() {
+	pollInterrupts();
 	Y += 1;
 	tick();
 	P.b.Z = (Y == 0);
 	P.b.N = (Y >> 7) > 0;
-	tick();
 }
 
 void opISC(uint16_t addr) {
 	uint8_t M = memGet(addr);
 	tick();
+	memSet(addr, M); //Dummy write
+	tick();
 	M += 1;
 	memSet(addr, M);
 	tick();
-	tick();
-	tick();
-
 	M = ~M;
 	if(P.b.C)
 		M += 1;
@@ -1660,11 +1787,12 @@ void opISC(uint16_t addr) {
 	P.b.V = ((oldA^A)&(M^A)&0x80) != 0;
 	P.b.Z = (A == 0);
 	P.b.N = (A >> 7) == 1;
+	pollInterrupts();
 }
 
 void opJMP(uint16_t addr) {
 	PC = addr;
-	tick();
+	pollInterrupts();
 }
 
 void opJSR(uint16_t addr) {
@@ -1676,18 +1804,32 @@ void opJSR(uint16_t addr) {
 	tick();
 	PC = addr;
 	tick();	
+	pollInterrupts();
+}
+
+void opLAS(uint16_t addr) {
+	uint8_t val = memGet(addr);
+	val &= SP;
+	A = val;
+	SP = val;
+	X = val;
+	P.b.Z = (val == 0);
+	P.b.N = ((val & 0x80) > 0);
+	tick();
+	pollInterrupts();
 }
 
 void opLAX(uint16_t addr) {
 	A = memGet(addr);
 	tick();
 	X = memGet(addr);
-	tick();
 	P.b.Z = (X == 0);
 	P.b.N = (X >> 7) > 0;
+	pollInterrupts();
 }
 
 void opLDA() {
+	pollInterrupts();
 	A = memGet(PC);
 	++PC;
 	tick();
@@ -1701,9 +1843,11 @@ void opLDA(uint16_t addr) {
 	tick();
 	P.b.Z = (A == 0);
 	P.b.N = (A >> 7) > 0;
+	pollInterrupts();
 }
 
 void opLDX() {
+	pollInterrupts();
 	X = memGet(PC);
 	++PC;
 	tick();
@@ -1716,9 +1860,11 @@ void opLDX(uint16_t addr) {
 	tick();
 	P.b.Z = (X == 0);
 	P.b.N = (X >> 7) > 0;
+	pollInterrupts();
 }
 
 void opLDY() {
+	pollInterrupts();
 	Y = memGet(PC);
 	++PC;
 	tick();
@@ -1731,9 +1877,11 @@ void opLDY(uint16_t addr) {
 	tick();
 	P.b.Z = (Y == 0);
 	P.b.N = (Y >> 7) > 0;
+	pollInterrupts();
 }
 
 void opLSR() {
+	pollInterrupts();
 	P.b.C = A & 1;
 	A = A >> 1;
 	P.b.Z = (A == 0);
@@ -1744,16 +1892,21 @@ void opLSR() {
 void opLSR(uint16_t addr) {
 	uint8_t M = memGet(addr);
 	tick();
+	memSet(addr, M); //Dummy write
+	tick();
 	P.b.C = M & 1;
 	M = M >> 1;
 	memSet(addr, M);
 	P.b.Z = (M == 0);
 	P.b.N = (M >> 7) > 0;
 	tick();
+	pollInterrupts();
 }
 
-void opNOP() {
+void opNOP(uint16_t addr) {
+	memGet(addr); //Dummy read
 	tick();
+	pollInterrupts();
 }
 
 void opORA(uint16_t addr) {
@@ -1763,9 +1916,11 @@ void opORA(uint16_t addr) {
 	A |= M;
 	P.b.Z = (A == 0);
 	P.b.N = (A >> 7) > 0;
+	pollInterrupts();
 }
 
 void opPHA() {
+	pollInterrupts();
 	memSet(((uint16_t)0x01 << 8) | SP, A);
 	--SP;
 	tick();
@@ -1773,6 +1928,7 @@ void opPHA() {
 }
 
 void opPHP() {
+	pollInterrupts();
 	memSet(((uint16_t)0x01 << 8) | SP, P.raw);
 	--SP;
 	tick();
@@ -1787,9 +1943,11 @@ void opPLA() {
 	P.b.Z = (A == 0);
 	P.b.N = (A >> 7) > 0;
 	tick();
+	pollInterrupts();
 }
 
 void opPLP() {
+	pollInterrupts();
 	++SP;
 	tick();
 	P.raw = memGet(((uint16_t)0x01 << 8) | SP);
@@ -1810,9 +1968,11 @@ void opRLA(uint16_t addr) {
 	A &= M;
 	P.b.Z = (A == 0);
 	P.b.N = (A >> 7) > 0;
+	pollInterrupts();
 }
 
 void opROL() {
+	pollInterrupts();
 	uint8_t C0 = P.b.C;
 	P.b.C = (A >> 7) > 0;
 	A = A << 1;
@@ -1826,6 +1986,8 @@ void opROL(uint16_t addr) {
 	uint8_t M = memGet(addr);
 	if(enableLogging) opTxt += int_to_hex(M);
 	tick();
+	memSet(addr, M); //Dummy write
+	tick();
 	uint8_t C0 = P.b.C;
 	P.b.C = (M >> 7) > 0;
 	M = M << 1;
@@ -1834,15 +1996,17 @@ void opROL(uint16_t addr) {
 	P.b.Z = (M == 0);
 	P.b.N = (A >> 7) > 0;
 	tick();
+	pollInterrupts();
 }
 
 void opROR() {
-	uint8_t C0 = P.b.C;
+	pollInterrupts();
+	bool C0 = P.b.C;
 	P.b.C = (A & 1);
 	A = A >> 1;
-	A |= (C0 << 7);
+	A |= C0 ? (1 << 7) : 0;
 	P.b.Z = (A == 0);
-	P.b.N = (A >> 7) > 0;
+	P.b.N = C0;
 	tick();
 }
 
@@ -1850,25 +2014,29 @@ void opROR(uint16_t addr) {
 	uint8_t M = memGet(addr);
 	if(enableLogging) opTxt += int_to_hex(M);
 	tick();
-	uint8_t C0 = P.b.C;
+	memSet(addr, M); //Dummy write
+	tick();
+	bool C0 = P.b.C;
 	P.b.C = (M & 1);
 	M = M >> 1;
-	M |= (C0 << 7);
+	M |= C0 ? (1 << 7) : 0;
 	memSet(addr, M);
 	P.b.Z = (M == 0);
-	P.b.N = (A >> 7) > 0;
+	P.b.N = C0;
 	tick();
+	pollInterrupts();
 }
 
 void opRRA(uint16_t addr) {
 	uint8_t M = memGet(addr);
 	tick();
+	memSet(addr, M); //Dummy write
+	tick();
 	uint8_t C0 = P.b.C;
 	P.b.C = (M & 1);
 	M = M >> 1;
 	M |= (C0 << 7);
 	memSet(addr, M);
-	tick();
 	tick();
 	uint8_t oldA = A;
 	A += M + P.b.C;
@@ -1876,6 +2044,7 @@ void opRRA(uint16_t addr) {
 	P.b.V = ((oldA^A)&(M^A)&0x80) != 0;
 	P.b.Z = (A == 0);
 	P.b.N = (A >> 7) == 1;
+	pollInterrupts();
 }
 
 void opRTI() {
@@ -1891,6 +2060,7 @@ void opRTI() {
 	PC = addr;
 	tick();
 	tick();
+	pollInterrupts();
 }
 
 void opRTS() {
@@ -1904,11 +2074,13 @@ void opRTS() {
 	tick();
 	tick();
 	tick();
+	pollInterrupts();
 }
 
 void opSAX(uint16_t addr) {
 	memSet(addr, A&X);
 	tick();
+	pollInterrupts();
 }
 
 void opSBC(uint16_t addr) {
@@ -1927,25 +2099,43 @@ void opSBC(uint16_t addr) {
 	uint8_t oldA = A;
 	A += M;
 
-	P.b.C = (A < oldA);
+	P.b.C = (A < oldA) || (M == 0);
 	P.b.V = ((oldA^A)&(M^A)&0x80) != 0;
 	P.b.Z = (A == 0);
 	P.b.N = (A >> 7) == 1;
+	pollInterrupts();
 }
 
 void opSEC() {
+	pollInterrupts();
 	P.b.C = 1;
 	tick();
 }
 
 void opSED() {
+	pollInterrupts();
 	P.b.D = 1;
 	tick();
 }
 
 void opSEI() {
+	pollInterrupts();
 	P.b.I = 1;
 	tick();
+}
+
+void opSHX(uint16_t addr) {
+	uint8_t val = X & (addr >> 8);
+	memSet(addr, val);
+	tick();
+	pollInterrupts();
+}
+
+void opSHY(uint16_t addr) {
+	uint8_t val = Y & (addr >> 8);
+	memSet(addr, val);
+	tick();
+	pollInterrupts();
 }
 
 void opSLO(uint16_t addr) {
@@ -1959,6 +2149,7 @@ void opSLO(uint16_t addr) {
 	A |= M;
 	P.b.Z = (A == 0);
 	P.b.N = (A >> 7) > 0;
+	pollInterrupts();
 }
 
 void opSRE(uint16_t addr) {
@@ -1972,24 +2163,37 @@ void opSRE(uint16_t addr) {
 	P.b.Z = (A == 0);
 	P.b.N = (A >> 7) > 0;
 	tick();
+	pollInterrupts();
 }
 
 void opSTA(uint16_t addr) {
 	memSet(addr, A);
 	tick();
+	pollInterrupts();
 }
 
 void opSTX(uint16_t addr) {
 	memSet(addr, X);
 	tick();
+	pollInterrupts();
 }
 
 void opSTY(uint16_t addr) {
 	memSet(addr, Y);
 	tick();
+	pollInterrupts();
+}
+
+void opTAS(uint16_t addr) {
+	SP = A & X;
+	uint8_t val = A & X & (addr >> 8);
+	memSet(addr, val);
+	tick();
+	pollInterrupts();
 }
 
 void opTAX() {
+	pollInterrupts();
 	X = A;
 	P.b.Z = (X == 0);
 	P.b.N = (X >> 7) > 0;
@@ -1997,6 +2201,7 @@ void opTAX() {
 }
 
 void opTAY() {
+	pollInterrupts();
 	Y = A;
 	P.b.Z = (Y == 0);
 	P.b.N = (Y >> 7) > 0;
@@ -2004,6 +2209,7 @@ void opTAY() {
 }
 
 void opTSX() {
+	pollInterrupts();
 	X = SP;
 	P.b.Z = (X == 0);
 	P.b.N = (X >> 7) > 0;
@@ -2011,6 +2217,7 @@ void opTSX() {
 }
 
 void opTXA() {
+	pollInterrupts();
 	A = X;
 	P.b.Z = (A == 0);
 	P.b.N = (A >> 7) > 0;
@@ -2018,15 +2225,26 @@ void opTXA() {
 }
 
 void opTXS() {
+	pollInterrupts();
 	SP = X;
 	tick();
 }
 
 void opTYA() {
+	pollInterrupts();
 	A = Y;
 	P.b.Z = (A == 0);
 	P.b.N = (A >> 7) > 0;
 	tick();
+}
+
+void opXAA(uint16_t addr) {
+	uint8_t val = memGet(addr);
+	tick();
+	A = X & val;
+	P.b.N = (A & 0x80) > 0;
+	P.b.Z = (A == 0);
+	pollInterrupts();
 }
 
 }
