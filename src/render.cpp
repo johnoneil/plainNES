@@ -1,20 +1,21 @@
 #include "render.h"
 #include <fstream>
+#include <array>
 
 namespace RENDER {
 
-uint32_t NTSCkey[0x40];
+std::array<uint32_t, 0x40> NTSCkey;
 
 int init()
 {
     std::ifstream PALfile("ntscpalette.pal",std::ios::binary);
-    uint8_t buffer[3];
+    std::array<uint8_t, 3> buffer;
     for(int i=0; i<0x40; ++i) {
         if(PALfile.eof()) {
             PALfile.close();
             return 1;
         }
-        PALfile.read((char*)buffer, 3);
+        PALfile.read((char*)buffer.data(), 3);
         NTSCkey[i] = (0xFF << 24)|(buffer[0]<<16)|(buffer[1]<<8)|(buffer[2]);
     }
     PALfile.close();

@@ -1,5 +1,6 @@
 #include "apu.h"
 #include "cpu.h"
+#include <array>
 
 namespace APU {
 
@@ -11,7 +12,7 @@ bool fiveFrameMode;
 uint8_t pulse1_lenCntr, pulse2_lenCntr, triangle_lenCntr, noise_lenCntr;
 unsigned int halfcycle;
 
-uint8_t lengthCounterArray[0x20] = {
+std::array<uint8_t,0x20> lengthCounterArray = {
     10, 254, 20, 2, 40, 4, 80, 6, 160, 8, 60, 10, 14, 12, 26, 14,
     12, 16, 24, 18, 48, 20, 96, 22, 192, 24, 72, 26, 16, 28, 32, 30
 };

@@ -1,10 +1,11 @@
 #include "io.h"
+#include <array>
 
 namespace IO
 {
 
-uint8_t controller_state[2];
-uint8_t controller_shiftR[2];
+std::array<uint8_t, 2> controller_state;
+std::array<uint8_t, 2> controller_shiftR;
 bool controllerStrobe;
 
 void init()

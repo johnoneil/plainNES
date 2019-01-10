@@ -4,13 +4,14 @@
 #include "utils.h"
 #include <iostream>
 #include <cstring>
+#include <array>
 
 namespace PPU {
 
 unsigned int scanline, dot; //Dots are also called cycles and can be considered the pixel column
 unsigned long frame;
 unsigned long long ppuClock;
-uint8_t pixelMap[240*256];
+std::array<uint8_t, 240*256> pixelMap;
 bool frameReady;
 
 
@@ -32,16 +33,7 @@ struct VRAM {
 		BitWorker<11, 4, uint16_t> upperY;
 	};
 }  currVRAM_addr, tempVRAM_addr;
-/*union VRAMreg {
-	uint16_t raw;
-	struct __attribute__ ((__packed__)) ctrlVals {
-		uint8_t coarseX : 5;
-		uint8_t coarseY : 5;
-		uint8_t NTsel : 2;
-		uint8_t fineY : 3;
-		uint8_t junk : 1; //Junk bit
-	} v;
-} currVRAM_addr, tempVRAM_addr; //v and t in nesdev wiki*/
+
 //uint16_t currVRAM_addr, tempVRAM_addr; //v and t in nesdev wiki
 uint8_t fineXscroll;	//x in nesdev wiki
 bool writeToggle;		//w in nesdev wiki
@@ -54,16 +46,16 @@ uint16_t ATshiftL, ATshiftH;
 uint16_t BGshiftL, BGshiftH;
 
 //Sprite memory, latches, shift registers, and counters
-uint8_t oam_data[256];
-uint8_t oam_sec[32]; 
-uint8_t sprite_shiftL[8];
-uint8_t sprite_shiftH[8];
-uint8_t spriteL[8];
-uint8_t spriteCounter[8];
+std::array<uint8_t, 256> oam_data;
+std::array<uint8_t, 32> oam_sec; 
+std::array<uint8_t, 8> sprite_shiftL;
+std::array<uint8_t, 8> sprite_shiftH;
+std::array<uint8_t, 8> spriteL;
+std::array<uint8_t, 8> spriteCounter;
 bool spr0onNextLine, spr0onLine;
 
 uint8_t VRAM_buffer;
-uint8_t paletteRAM[32]; //Internal palette control RAM. Can't be mapped
+std::array<uint8_t, 32> paletteRAM; //Internal palette control RAM. Can't be mapped
 
 //PPUCTRL flags
 //nametable select modifies part of tempVRAM_addr
@@ -393,7 +385,7 @@ void spriteEval()
 	switch(dot) {
 		case 1:
 			//Clear sec OAM
-			memset(oam_sec, 0xFF, 32);
+			oam_sec.fill(0xFF);
 			break;
 		case 65:
 			{
@@ -597,7 +589,7 @@ std::array<std::array<uint8_t, 16*16*64>, 2> getPatternTableBuffers() //Used in 
 
 uint8_t* getPixelMap()
 {
-	return pixelMap;
+	return pixelMap.data();
 }
 
 bool isframeReady() {

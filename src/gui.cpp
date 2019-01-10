@@ -18,12 +18,12 @@ SDL_Texture *maintexture;
 SDL_Texture *PTtexture0;
 SDL_Texture *PTtexture1;
 SDL_Rect rectPT0, rectPT1;
-SDL_Rect PaletteRect[8][4];
+std::array<std::array<SDL_Rect, 4>, 8> PaletteRect;
 SDL_Event event;
 const uint8_t *kbState = SDL_GetKeyboardState(NULL);
 
-uint32_t mainpixelMap[256 * 240];
-uint32_t PTpixelMap[16*8 * 16*8];
+std::array<uint32_t, 256 * 240> mainpixelMap;
+std::array<uint32_t, 16*8 * 16*8> PTpixelMap;
 bool quit = false;
 
 int init()
@@ -63,7 +63,7 @@ int initMainWindow() {
         mainpixelMap[i] = 0xFF000000;
     }
 
-    SDL_UpdateTexture(maintexture, NULL, mainpixelMap, 256*4);
+    SDL_UpdateTexture(maintexture, NULL, mainpixelMap.data(), 256*4);
     SDL_RenderCopy(mainrenderer, maintexture, NULL, NULL);
     SDL_RenderPresent(mainrenderer);
 
@@ -98,8 +98,8 @@ int initPPUWindow() {
         PTpixelMap[i] = 0xFF000000;
     }
 
-    SDL_UpdateTexture(PTtexture0, NULL, PTpixelMap, 16*8*4);
-    SDL_UpdateTexture(PTtexture1, NULL, PTpixelMap, 16*8*4);
+    SDL_UpdateTexture(PTtexture0, NULL, PTpixelMap.data(), 16*8*4);
+    SDL_UpdateTexture(PTtexture1, NULL, PTpixelMap.data(), 16*8*4);
     SDL_RenderCopy(PPUrenderer, PTtexture0, NULL, &rectPT0);
     SDL_RenderCopy(PPUrenderer, PTtexture1, NULL, &rectPT1);
 
@@ -215,19 +215,19 @@ void update()
 }
 
 void updateMainWindow() {
-    RENDER::convertNTSC2ARGB(mainpixelMap, PPU::getPixelMap(), 256*240);
+    RENDER::convertNTSC2ARGB(mainpixelMap.data(), PPU::getPixelMap(), 256*240);
 
-    SDL_UpdateTexture(maintexture, NULL, mainpixelMap, 256*4);
+    SDL_UpdateTexture(maintexture, NULL, mainpixelMap.data(), 256*4);
     SDL_RenderCopy(mainrenderer, maintexture, NULL, NULL);
     SDL_RenderPresent(mainrenderer);
 }
 
 void updatePPUWindow() {
     std::array<std::array<uint8_t, 16*16*64>, 2> PTarrays = PPU::getPatternTableBuffers();
-    RENDER::convertNTSC2ARGB(PTpixelMap, PTarrays[0].data(), PTarrays[0].size());
-    SDL_UpdateTexture(PTtexture0, NULL, PTpixelMap, 16*8*4);
-    RENDER::convertNTSC2ARGB(PTpixelMap, PTarrays[1].data(), PTarrays[1].size());
-    SDL_UpdateTexture(PTtexture1, NULL, PTpixelMap, 16*8*4);
+    RENDER::convertNTSC2ARGB(PTpixelMap.data(), PTarrays[0].data(), PTarrays[0].size());
+    SDL_UpdateTexture(PTtexture0, NULL, PTpixelMap.data(), 16*8*4);
+    RENDER::convertNTSC2ARGB(PTpixelMap.data(), PTarrays[1].data(), PTarrays[1].size());
+    SDL_UpdateTexture(PTtexture1, NULL, PTpixelMap.data(), 16*8*4);
 
     SDL_RenderCopy(PPUrenderer, PTtexture0, NULL, &rectPT0);
     SDL_RenderCopy(PPUrenderer, PTtexture1, NULL, &rectPT1);

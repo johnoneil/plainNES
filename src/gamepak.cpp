@@ -7,6 +7,7 @@
 #include "mapper.h"
 #include "mapper0.h"
 #include "mapper1.h"
+#include <array>
 
 namespace GAMEPAK {
 
@@ -15,12 +16,12 @@ const char* headerName = "NES\x1A";
 iNES_Header header;
 
 int init(std::ifstream &file) {
-	char headerdata[16];
+	std::array<char, 16> headerdata;
 	uint8_t mapperNum;
 
-	file.read(headerdata,16);
+	file.read(headerdata.data(),16);
 	
-	if(memcmp(headerName,headerdata,4) != 0) {
+	if(memcmp(headerName,headerdata.data(),4) != 0) {
 		std::cout << "Invalid file format\nIS: ";
 		for(int i=0; i<4; i++)
 			std::cout << std::hex << int(headerdata[i]) << " ";
@@ -35,7 +36,7 @@ int init(std::ifstream &file) {
 		return -1;
 	}
 
-	memcpy(&header, headerdata, sizeof(header));
+	memcpy(&header, headerdata.data(), sizeof(header));
 
 	mapperNum = ((uint16_t)header.mapperMSB << 8) | header.mapperLSB;
 	

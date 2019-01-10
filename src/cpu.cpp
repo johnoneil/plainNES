@@ -7,8 +7,7 @@
 #include <iostream>
 #include <fstream>
 #include <iomanip>
-//#include <string>
-//#include <sstream>
+#include <array>
 
 namespace CPU {
 
@@ -30,7 +29,7 @@ union StatusReg {
 		bool N : 1; //Negative
 	} b;
 } P;
-uint8_t RAM[2048];
+std::array<uint8_t, 2048> RAM;
 uint8_t OAMDMA;
 
 //Logging variables
@@ -38,7 +37,7 @@ uint16_t PC_init;
 std::string opTxt;
 std::stringstream initVals;
 int memCnt;
-uint8_t memVals[3];
+std::array<uint8_t, 3> memVals;
 std::ofstream logFile;
 bool enableLogging;
 
