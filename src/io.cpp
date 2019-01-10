@@ -55,9 +55,4 @@ void regSet(uint16_t addr, uint8_t val)
     }
 }
 
-uint8_t* getControllerStatePtr()
-{
-    return controller_state;
-}
-
 } // IO

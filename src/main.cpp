@@ -60,8 +60,8 @@ int main(int argc, char *argv[])
 	}
 
 	float targetFPS = 60;
-	float avgFPS = targetFPS;
-	float cmdFPS = targetFPS;
+	//float avgFPS = targetFPS;
+	//float cmdFPS = targetFPS;
 	const int avgWindow = 10;
 	float FPSAdj = 0.1;
 	
@@ -82,8 +82,8 @@ int main(int argc, char *argv[])
 				avgFrameDuration_ns = (boost::chrono::high_resolution_clock::now() - lastUpdate)/avgWindow;
 				lastUpdate = boost::chrono::high_resolution_clock::now();
 				frames = 0;
-				avgFPS = 1000000000.0f/(avgFrameDuration_ns.count());
-				cmdFPS = 1000000000.0f/(commandedFrameDuration_ns.count());
+				//avgFPS = 1000000000.0f/(avgFrameDuration_ns.count());
+				//cmdFPS = 1000000000.0f/(commandedFrameDuration_ns.count());
 			
 				if(avgFrameDuration_ns > (targetFrameDuration_ns)) {
 					commandedFrameDuration_ns -= durationAdj;
@@ -93,7 +93,7 @@ int main(int argc, char *argv[])
 				}
 			}
 
-			GUI::update(PPU::getPixelMap(),IO::getControllerStatePtr());
+			GUI::update();
 			PPU::setframeReady(false);
 			while(PPU::isframeReady() == 0)
 				CPU::step();
