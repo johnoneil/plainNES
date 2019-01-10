@@ -1,9 +1,11 @@
 # plainNES
 A NES emulator written in C++
 
-The emulator is currently largely a work in progress.
+Uses Boost and SDL2 libraries
 
-The current version has a fully functional CPU, including unofficial opcodes, and passes NESTest. The PPU works well enough to display some test ROMs, but is still unusable for games. The APU is not currently implemented. The emulator currently runs at top speed without throttling.
+The emulator is still largely a work in progress.
+
+The current version has a fully functional CPU, including unofficial opcodes, and passes NESTest and a growing number of other test ROMs. The PPU works well enough to display many test ROMs and some games. The APU is not currently implemented outside of IRQ behavior and timers.
 
 Controls are hardcoded at this time:
 
