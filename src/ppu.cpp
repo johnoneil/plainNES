@@ -467,6 +467,7 @@ void renderPixel()
 				BGpixelColor |= (ATshiftH >> (12-fineXscroll)) & (8);
 			}
 			if(showSpr) {
+				usingSpr0 = false;
 				for(int i = 0; i<8; ++i) {
 					if(spriteCounter[i] > 0) {
 						--spriteCounter[i];
@@ -490,8 +491,15 @@ void renderPixel()
 						if(SPRpixelColor != 0 && i == 0 && spr0onLine) {
 							usingSpr0 = true;
 						}
+					}
+					else { //Don't need to pull data, but still need to increment sprite
+						if((spriteL[i] & 0x40) == 0) { //Not flipped horizontally
+							sprite_shiftL[i] <<= 1;
+							sprite_shiftH[i] <<= 1;
+						}
 						else {
-							usingSpr0 = false;
+							sprite_shiftL[i] >>= 1;
+							sprite_shiftH[i] >>= 1;
 						}
 					}
 				}
