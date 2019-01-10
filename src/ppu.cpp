@@ -513,12 +513,13 @@ void renderPixel()
 				}
 			}
 
+			//Add 16 for sprite colors to ensure we pull from sprite portion of palette memory
 			if(BGpixelColor == 0)
-				pixelColor = SPRpixelColor;
+				pixelColor = SPRpixelColor + 16;
 			else if(SPRpixelColor == 0)
 				pixelColor = BGpixelColor;
 			else if(sprPriority)
-				pixelColor = SPRpixelColor;
+				pixelColor = SPRpixelColor + 16;
 			else
 				pixelColor = BGpixelColor;
 
