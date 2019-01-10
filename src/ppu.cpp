@@ -60,7 +60,7 @@ uint8_t sprite_shiftL[8];
 uint8_t sprite_shiftH[8];
 uint8_t spriteL[8];
 uint8_t spriteCounter[8];
-bool spr0inrange;
+bool spr0onNextLine, spr0onLine;
 
 uint8_t VRAM_buffer;
 uint8_t paletteRAM[32]; //Internal palette control RAM. Can't be mapped
@@ -341,28 +341,16 @@ void renderFrameStep()
 					NTlatch = GAMEPAK::PPUmemGet(0x2000 + (currVRAM_addr.value & 0x0FFF));
 					break;
 				case 3:
-					//ATlatch = GAMEPAK::PPUmemGet( 0x23C0 + (currVRAM_addr & 0xC00) + ((currVRAM_addr & 0x1F) / 4) + (((currVRAM_addr & 0x3E0) / 4) << 3));
 					ATlatch = GAMEPAK::PPUmemGet( 0x23C0 + (currVRAM_addr.NTsel << 10) + ((currVRAM_addr.coarseX) / 4) + (((currVRAM_addr.coarseY) / 4) << 3));
 					if((currVRAM_addr.coarseY % 4) >= 2) ATlatch >>= 4;
 					if((currVRAM_addr.coarseX % 4) >= 2) ATlatch >>= 2;
 					ATlatch &= 0x3;
-					//ATlatch = GAMEPAK::PPUmemGet(0x23C0 | (currVRAM_addr.raw & 0x0C00) | ((currVRAM_addr.raw >> 4) & 0x38) | ((currVRAM_addr.raw >> 2) & 0x07));
-					//ATlatch = GAMEPAK::PPUmemGet(0x23C0 | (currVRAM_addr & 0x0C00) | ((((currVRAM_addr & 0x3E0) >> 5) / 4) << 3) | ((currVRAM_addr & 0x1F) / 4));
-					//Shift AT to get proper quadrant bits over to bits 0 and 1
-					//if(((currVRAM_addr & 0x3E0) >> 5) & 2) ATlatch >>= 4;
-					//if((currVRAM_addr & 0x1F) & 2) ATlatch >>= 2;
 					break;
 				case 5:
 					BGLlatch = GAMEPAK::PPUmemGet((NTlatch << 4) + currVRAM_addr.fineY + (backgroundTileSel ? 0x1000 : 0));
-					//uint16_t BGtileaddr = ((uint16_t)NTlatch << 4) | (currVRAM_addr >> 12);
-					//if(backgroundTileSel) BGtileaddr += 0x1000;
-					//BGLlatch = GAMEPAK::PPUmemGet(BGtileaddr);
 					break;
 				case 7:
 					BGHlatch = GAMEPAK::PPUmemGet((NTlatch << 4) + currVRAM_addr.fineY + (backgroundTileSel ? 0x1000 : 0) + 8);
-					//uint16_t BGtileaddr = ((uint16_t)NTlatch << 4) | (currVRAM_addr >> 12);
-					//if(backgroundTileSel) BGtileaddr += 0x1000;
-					//BGHlatch = GAMEPAK::PPUmemGet(BGtileaddr + 8);
 					break;
 				case 0:					
 					if(dot != 256)
@@ -382,8 +370,6 @@ void renderFrameStep()
 			//hori(v) = hori(t)
 			currVRAM_addr.coarseX = tempVRAM_addr.coarseX;
 			currVRAM_addr.bit10 = tempVRAM_addr.bit10;
-			//currVRAM_addr &= 0x7BE0;
-			//currVRAM_addr |= (tempVRAM_addr & 0x041F);
 		}
 			break;
 		case 280 ... 304:
@@ -392,8 +378,6 @@ void renderFrameStep()
 				//vert(v) = vert(t) each dot
 				currVRAM_addr.coarseY = tempVRAM_addr.coarseY;
 				currVRAM_addr.upperY = tempVRAM_addr.upperY;
-				//currVRAM_addr &= 0x041F;
-				//currVRAM_addr |= (tempVRAM_addr & 0x7BE0);
 			}
 			break;
 		case 337: case 339:
@@ -416,14 +400,14 @@ void spriteEval()
 			//Sprite eval
 			int oam_sec_idx = 0;
 			int n, m;
-			spr0inrange = false;
+			spr0onNextLine = false;
 			for(n=0; n<64; ++n) {
 				if(oam_sec_idx >= 32) break;
 				unsigned int yCoord = oam_data[n*4];
 				unsigned int yMax = yCoord + 8;
 				if(spriteSize) yMax += 8;
 				if(scanline >= yCoord && scanline < yMax) {
-					if(n == 0) spr0inrange = true;
+					if(n == 0) spr0onNextLine = true;
 					for(m=0; m<4; ++m)
 						oam_sec[oam_sec_idx+m] = oam_data[n*4+m];
 					oam_sec_idx += 4;
@@ -448,6 +432,7 @@ void spriteEval()
 			break;
 		case 257:
 			//Fetch sprite data
+			spr0onLine = spr0onNextLine;
 			for(int i = 0; i<8; ++i) {
 				uint8_t yPos = scanline - oam_sec[i*4];
 				uint16_t addr = oam_sec[i*4 + 1];
@@ -480,6 +465,7 @@ void renderPixel()
 	uint8_t BGpixelColor, SPRpixelColor, pixelColor; //Which color to use from palette
 	BGpixelColor = SPRpixelColor = pixelColor = 0;
 	bool sprPriority = false;
+	bool usingSpr0 = false;
 	if(scanline < 240 && dot > 0 && dot <= 256) {
 		if(rendering) {
 			if(showBG) {
@@ -509,6 +495,12 @@ void renderPixel()
 						if(currSprColor == 0) continue; //Transparent, so we can move on
 						sprPriority = (spriteL[i] & 0x20) == 0;
 						SPRpixelColor = ((spriteL[i] & 3) << 2) + currSprColor;
+						if(SPRpixelColor != 0 && i == 0 && spr0onLine) {
+							usingSpr0 = true;
+						}
+						else {
+							usingSpr0 = false;
+						}
 					}
 				}
 			}
@@ -522,6 +514,9 @@ void renderPixel()
 				pixelColor = SPRpixelColor + 16;
 			else
 				pixelColor = BGpixelColor;
+
+			if(usingSpr0 && BGpixelColor != 0 && SPRpixelColor != 0)
+				spr0hit = true;
 
 			if((pixelColor & 3) == 0) pixelColor = 0; //Set to universal background color
 
