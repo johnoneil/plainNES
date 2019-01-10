@@ -289,6 +289,7 @@ void regSet(uint16_t addr, uint8_t val)
 
 uint8_t getPalette(uint16_t addr)
 {
+	addr %= 0x20;
 	switch(addr) {
 		case 0x10:
 			addr = 0x00;
@@ -303,11 +304,12 @@ uint8_t getPalette(uint16_t addr)
 			addr = 0x0C;
 			break;
 	}
-	return paletteRAM[addr % 0x20];
+	return paletteRAM[addr];
 }
 
 void setPalette(uint16_t addr, uint8_t val)
 {
+	addr %= 0x20;
 	switch(addr) {
 		case 0x10:
 			addr = 0x00;
@@ -322,7 +324,7 @@ void setPalette(uint16_t addr, uint8_t val)
 			addr = 0x0C;
 			break;
 	}
-	paletteRAM[addr % 0x20] = val;
+	paletteRAM[addr] = val;
 }
 
 void renderFrameStep()

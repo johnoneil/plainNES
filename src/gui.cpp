@@ -116,7 +116,13 @@ int initPPUWindow() {
     for(int i=0; i<8; ++i) {
         for(int j=0; j<4; ++j) {
             uint32_t paletteARGB;
-            uint8_t paletteByte = PPU::getPalette(0x3F00 + i*4 + j);
+            uint8_t paletteByte;
+            if(j == 0) {
+                paletteByte = PPU::getPalette(0x3F00);
+            }
+            else {
+                paletteByte = PPU::getPalette(0x3F00 + i*4 + j);
+            }
             RENDER::convertNTSC2ARGB(&paletteARGB, &paletteByte, 1);
             SDL_SetRenderDrawColor(PPUrenderer, (paletteARGB >> 16) & 0xFF, (paletteARGB >> 8) & 0xFF, paletteARGB & 0xFF, 255);
             SDL_RenderFillRect(PPUrenderer, &PaletteRect[i][j]);
@@ -229,7 +235,13 @@ void updatePPUWindow() {
     for(int i=0; i<8; ++i) {
         for(int j=0; j<4; ++j) {
             uint32_t paletteARGB;
-            uint8_t paletteByte = PPU::getPalette(0x3F00 + i*4 + j);
+            uint8_t paletteByte;
+            if(j == 0) {
+                paletteByte = PPU::getPalette(0x3F00);
+            }
+            else {
+                paletteByte = PPU::getPalette(0x3F00 + i*4 + j);
+            }
             RENDER::convertNTSC2ARGB(&paletteARGB, &paletteByte, 1);
             SDL_SetRenderDrawColor(PPUrenderer, (paletteARGB >> 16) & 0xFF, (paletteARGB >> 8) & 0xFF, paletteARGB & 0xFF, 255);
             SDL_RenderFillRect(PPUrenderer, &PaletteRect[i][j]);
