@@ -86,17 +86,11 @@ int main(int argc, char *argv[])
 				cmdFPS = 1000000000.0f/(commandedFrameDuration_ns.count());
 			
 				if(avgFrameDuration_ns > (targetFrameDuration_ns)) {
-					std::cout << "FPS too low  ";
 					commandedFrameDuration_ns -= durationAdj;
 				}
 				else if(avgFrameDuration_ns < (targetFrameDuration_ns)) {
-					std::cout << "FPS too high ";
 					commandedFrameDuration_ns += durationAdj;
 				}
-				else {
-					std::cout << "FPS correct  ";
-				}
-				std::cout << "tgt: " << targetFPS << " act: " << avgFPS << " cmd: " << cmdFPS << std::endl;
 			}
 
 			GUI::update(PPU::getPixelMap(),IO::getControllerStatePtr());
