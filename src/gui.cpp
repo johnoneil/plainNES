@@ -3,7 +3,6 @@
 #include "ppu.h"
 #include "io.h"
 #include <SDL.h>
-#undef main
 #include <cstring>
 #include <array>
 
@@ -16,14 +15,15 @@ SDL_Window *PPUwindow;
 SDL_Renderer *mainrenderer;
 SDL_Renderer *PPUrenderer;
 SDL_Texture *maintexture;
-SDL_Texture *PPUtexture0;
-SDL_Texture *PPUtexture1;
+SDL_Texture *PTtexture0;
+SDL_Texture *PTtexture1;
 SDL_Rect rectPT0, rectPT1;
+SDL_Rect PaletteRect[8][4];
 SDL_Event event;
 const uint8_t *kbState = SDL_GetKeyboardState(NULL);
 
 uint32_t mainpixelMap[256 * 240];
-uint32_t PPUpixelMap[16*8 * 16*8];
+uint32_t PTpixelMap[16*8 * 16*8];
 bool quit = false;
 
 int init()
@@ -73,30 +73,56 @@ int initMainWindow() {
 int initPPUWindow() {
     PPUwindow = SDL_CreateWindow("plainNES - PPU Debugging",
                 50, 50,
-                32*8*SCREEN_SCALE,16*8*SCREEN_SCALE,
+                (32*8 + 62 + 4 + 4)*SCREEN_SCALE,(16*8 + 4)*SCREEN_SCALE,
                 0);
+    
     
     PPUrenderer = SDL_CreateRenderer(PPUwindow, -1, 0);
     SDL_RenderSetScale(PPUrenderer, SCREEN_SCALE, SCREEN_SCALE);
-    PPUtexture0 = SDL_CreateTexture(PPUrenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 16*8, 16*8);
-    PPUtexture1 = SDL_CreateTexture(PPUrenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 16*8, 16*8);
-    rectPT0.x = 0;
-    rectPT0.y = 0;
+    SDL_SetRenderDrawColor(PPUrenderer, 157, 161, 170, 255); 
+    SDL_RenderClear(PPUrenderer); //Fill with grey color by default
+
+    //Setup Pattern Table Textures
+    PTtexture0 = SDL_CreateTexture(PPUrenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 16*8, 16*8);
+    PTtexture1 = SDL_CreateTexture(PPUrenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 16*8, 16*8);
+    rectPT0.x = 2;
+    rectPT0.y = 2;
     rectPT0.h = 16*8;
     rectPT0.w = 16*8;
-    rectPT1.x = 16*8;
-    rectPT1.y = 0;
+    rectPT1.x = 16*8 + 4;
+    rectPT1.y = 2;
     rectPT1.h = 16*8;
     rectPT1.w = 16*8;
 
     for(int i=0; i<16*8 * 16*8; ++i) {
-        PPUpixelMap[i] = 0xFF000000;
+        PTpixelMap[i] = 0xFF000000;
     }
 
-    SDL_UpdateTexture(PPUtexture0, NULL, PPUpixelMap, 16*8*4);
-    SDL_UpdateTexture(PPUtexture1, NULL, PPUpixelMap, 16*8*4);
-    SDL_RenderCopy(PPUrenderer, PPUtexture0, NULL, &rectPT0);
-    SDL_RenderCopy(PPUrenderer, PPUtexture1, NULL, &rectPT1);
+    SDL_UpdateTexture(PTtexture0, NULL, PTpixelMap, 16*8*4);
+    SDL_UpdateTexture(PTtexture1, NULL, PTpixelMap, 16*8*4);
+    SDL_RenderCopy(PPUrenderer, PTtexture0, NULL, &rectPT0);
+    SDL_RenderCopy(PPUrenderer, PTtexture1, NULL, &rectPT1);
+
+    //Setup Palette Textures
+    //Each palette is 14x14 with 2 pixel borders for a total of 62x
+    for(int i=0; i<8; ++i) {
+        for(int j=0; j<4; ++j) {
+            PaletteRect[i][j].x = 262 + j*16;
+            PaletteRect[i][j].y = 2 + i*16;
+            PaletteRect[i][j].h = 14;
+            PaletteRect[i][j].w = 14;
+        }
+    }
+    for(int i=0; i<8; ++i) {
+        for(int j=0; j<4; ++j) {
+            uint32_t paletteARGB;
+            uint8_t paletteByte = PPU::getPalette(0x3F00 + i*4 + j);
+            RENDER::convertNTSC2ARGB(&paletteARGB, &paletteByte, 1);
+            SDL_SetRenderDrawColor(PPUrenderer, (paletteARGB >> 16) & 0xFF, (paletteARGB >> 8) & 0xFF, paletteARGB & 0xFF, 255);
+            SDL_RenderFillRect(PPUrenderer, &PaletteRect[i][j]);
+        }
+    }
+    
     SDL_RenderPresent(PPUrenderer);
 
     return 0;
@@ -192,13 +218,24 @@ void updateMainWindow() {
 
 void updatePPUWindow() {
     std::array<std::array<uint8_t, 16*16*64>, 2> PTarrays = PPU::getPatternTableBuffers();
-    RENDER::convertNTSC2ARGB(PPUpixelMap, PTarrays[0].data(), PTarrays[0].size());
-    SDL_UpdateTexture(PPUtexture0, NULL, PPUpixelMap, 16*8*4);
-    RENDER::convertNTSC2ARGB(PPUpixelMap, PTarrays[1].data(), PTarrays[1].size());
-    SDL_UpdateTexture(PPUtexture1, NULL, PPUpixelMap, 16*8*4);
+    RENDER::convertNTSC2ARGB(PTpixelMap, PTarrays[0].data(), PTarrays[0].size());
+    SDL_UpdateTexture(PTtexture0, NULL, PTpixelMap, 16*8*4);
+    RENDER::convertNTSC2ARGB(PTpixelMap, PTarrays[1].data(), PTarrays[1].size());
+    SDL_UpdateTexture(PTtexture1, NULL, PTpixelMap, 16*8*4);
 
-    SDL_RenderCopy(PPUrenderer, PPUtexture0, NULL, &rectPT0);
-    SDL_RenderCopy(PPUrenderer, PPUtexture1, NULL, &rectPT1);
+    SDL_RenderCopy(PPUrenderer, PTtexture0, NULL, &rectPT0);
+    SDL_RenderCopy(PPUrenderer, PTtexture1, NULL, &rectPT1);
+
+    for(int i=0; i<8; ++i) {
+        for(int j=0; j<4; ++j) {
+            uint32_t paletteARGB;
+            uint8_t paletteByte = PPU::getPalette(0x3F00 + i*4 + j);
+            RENDER::convertNTSC2ARGB(&paletteARGB, &paletteByte, 1);
+            SDL_SetRenderDrawColor(PPUrenderer, (paletteARGB >> 16) & 0xFF, (paletteARGB >> 8) & 0xFF, paletteARGB & 0xFF, 255);
+            SDL_RenderFillRect(PPUrenderer, &PaletteRect[i][j]);
+        }
+    }
+
     SDL_RenderPresent(PPUrenderer);
 }
 
