@@ -57,6 +57,9 @@ bool spr0onNextLine, spr0onLine;
 uint8_t VRAM_buffer;
 std::array<uint8_t, 32> paletteRAM; //Internal palette control RAM. Can't be mapped
 
+//PPU data bus - used for open bus behavior
+uint8_t ioBus;
+
 //PPUCTRL flags
 //nametable select modifies part of tempVRAM_addr
 bool NMIenable, spriteSize, backgroundTileSel, spriteTileSel, incrementMode;
@@ -132,41 +135,44 @@ void step()
 
 uint8_t regGet(uint16_t addr)
 {
+	addr = 0x2000 + (addr % 8);
 	switch(addr) {
 		case 0x2000: //PPUCTRL
 			//Write only
-			return 0;
+			return ioBus;
 			break;
 		case 0x2001: //PPUMASK
 			//Write only
-			return 0;
+			return ioBus;
 			break;
 		case 0x2002: //PPUSTATUS
 			{
 			uint8_t status = (vblank << 7) | (spr0hit << 6) | (sprOverflow << 5);
 			vblank = 0;
 			writeToggle = 0;
-			return status;
+			ioBus = (ioBus & 0x1F) | status;
+			return ioBus;
 			}
 			break;
 			
 		case 0x2003: //OAMADDR
 			//Write only
-			return 0;
+			return ioBus;
 			break;
 
 		case 0x2004: //OAMDATA
-			return oam_data[OAMaddr];
+			ioBus = oam_data[OAMaddr];
+			return ioBus;
 			break;
 
 		case 0x2005: //PPUSCROLL
 			//Write only
-			return 0;
+			return ioBus;
 			break;
 
 		case 0x2006: //PPUADDR
 			//Write only
-			return 0;
+			return ioBus;
 			break;
 
 		case 0x2007: //PPUDATA
@@ -186,7 +192,8 @@ uint8_t regGet(uint16_t addr)
 			}
 			if(incrementMode == 0) ++currVRAM_addr.value;
 			else currVRAM_addr.value += 32;
-			return data;
+			ioBus = data;
+			return ioBus;
 			}
 			break;
 		default:
@@ -198,6 +205,8 @@ uint8_t regGet(uint16_t addr)
 
 void regSet(uint16_t addr, uint8_t val)
 {
+	addr = 0x2000 + (addr % 8);
+	ioBus = val; //Set I/O bus to value
 	switch(addr) {
 		case 0x2000: //PPUCTRL
 			NMIenable = (val >> 7) > 0;
