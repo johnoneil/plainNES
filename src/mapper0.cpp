@@ -1,5 +1,6 @@
 #include "mapper0.h"
 #include "ppu.h"
+#include "cpu.h"
 
 Mapper0::Mapper0(GAMEPAK::iNES_Header header)
 {
@@ -13,13 +14,13 @@ uint8_t Mapper0::memGet(uint16_t addr)
 {
     //No PRG RAM
     if(addr >= 0x6000 && addr < 0x8000) {
-		return 0;
+		return CPU::busVal;
 	}
 	else if(addr >= 0x8000) {
 		return PRGROM[(addr - 0x8000) % PRGROM.size()];
 	}
 	else {
-		return 0;
+		return CPU::busVal;
 	}
 }
 

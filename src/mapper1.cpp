@@ -1,5 +1,6 @@
 #include "mapper1.h"
 #include "ppu.h"
+#include "cpu.h"
 
 Mapper1::Mapper1(GAMEPAK::iNES_Header header)
 {
@@ -45,7 +46,7 @@ uint8_t Mapper1::memGet(uint16_t addr)
 		}
 	}
 	else {
-		return 0;
+		return CPU::busVal;
 	}
 }
 

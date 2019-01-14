@@ -112,7 +112,7 @@ uint8_t regGet(uint16_t addr)
         frameInterruptRequest = false;
         return val;
     }
-    return 0;
+    return CPU::busVal; //Open bus behavior
 }
 
 void regSet(uint16_t addr, uint8_t val)

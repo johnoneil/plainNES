@@ -12,6 +12,8 @@ enum OpType {
 	READWRITE,
 };
 
+extern uint8_t busVal;
+
 extern bool alive;
 extern unsigned long long cycle;
 extern bool enableLogging;

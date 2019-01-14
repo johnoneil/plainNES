@@ -31,6 +31,7 @@ union StatusReg {
 } P;
 std::array<uint8_t, 2048> RAM;
 uint8_t OAMDMA;
+uint8_t busVal;
 
 //Logging variables
 uint16_t PC_init;
@@ -46,31 +47,33 @@ uint8_t memGet(uint16_t addr) {
 	//Logic for grabbing 8bit value at address
 	//Handles mirroring, or which component to get data from
 	//CPU memory is from 0000-1FFF, but 0800-1FFF is mirrored
+	//Value is put onto bus first before returning, to allow for open bus behavior
 	
 	if(addr < 0x2000) {			//CPU 2k internal memory space or mirrored
-		return RAM[addr % 0x800];
+		busVal = RAM[addr % 0x800];
 	}
 	else if(addr < 0x4000) {	//PPU registers or mirrored
-		return PPU::regGet(0x2000 + (addr % 8));
+		busVal = PPU::regGet(0x2000 + (addr % 8));
 	}
 	else if(addr < 0x4014) {	//APU registers
-		return APU::regGet(addr);
+		busVal = APU::regGet(addr);
 	}
-	else if(addr == 0x4014) {	//OAMDMA register
-		return OAMDMA;
+	else if(addr == 0x4014) {	//OAMDMA register is write only
+		//Do nothing. busVal remains the same
 	}
 	else if(addr < 0x4016) {	//APU registers
-		return APU::regGet(addr);
+		busVal = APU::regGet(addr);
 	}
 	else if(addr < 0x4018) {	//IO registers
-		return IO::regGet(addr);
+		busVal = IO::regGet(addr);
 	}
 	else if(addr < 0x4020) {
-		return IO::regGet(addr);	//APU registers
+		busVal = IO::regGet(addr);	//APU registers
 	}
 	else {
-		return GAMEPAK::CPUmemGet(addr);	//Gamepak memory
+		busVal = GAMEPAK::CPUmemGet(addr);	//Gamepak memory
 	}
+	return busVal;
 }
 
 void memSet(uint16_t addr, uint8_t val) {

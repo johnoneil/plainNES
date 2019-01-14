@@ -1,4 +1,5 @@
 #include "io.h"
+#include "cpu.h"
 #include <array>
 
 namespace IO
@@ -19,27 +20,29 @@ void init()
 
 uint8_t regGet(uint16_t addr)
 {
+    uint8_t val = 0;
     if(addr == 0x4016) {
         if(controllerStrobe) {
-            return controller_state[0] & 1;
+            val = controller_state[0] & 1;
         }
         else {
-            uint8_t val = controller_shiftR[0] & 1;
+            val = controller_shiftR[0] & 1;
             controller_shiftR[0] >>= 1;
-            return val;
         }
     }
-    if(addr == 0x4017) {
+    else if(addr == 0x4017) {
         if(controllerStrobe) {
-            return controller_state[1] & 1;
+            val = controller_state[1] & 1;
         }
         else {
-            uint8_t val = controller_shiftR[1] & 1;
+            val = controller_shiftR[1] & 1;
             controller_shiftR[1] >>= 1;
-            return val;
         }
     }
-    return 0;
+    else {
+        return CPU::busVal;
+    }
+    return (CPU::busVal & 0xE0) | val;
 }
 
 void regSet(uint16_t addr, uint8_t val)
