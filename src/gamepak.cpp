@@ -7,6 +7,7 @@
 #include "mapper.h"
 #include "mapper0.h"
 #include "mapper1.h"
+#include "mapper3.h"
 #include <array>
 
 namespace GAMEPAK {
@@ -47,6 +48,7 @@ int init(std::ifstream &file) {
 	switch(mapperNum) {
 		case 0: mapper = new Mapper0(header); break;
 		case 1: mapper = new Mapper1(header); break;
+		case 3: mapper = new Mapper3(header); break;
 		default: mapper = NULL;
 	}
 
