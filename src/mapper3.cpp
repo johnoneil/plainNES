@@ -7,6 +7,7 @@ Mapper3::Mapper3(GAMEPAK::iNES_Header header)
     VRAM.resize(0x800);
     PRGROM.resize(header.prgROM16cnt * 0x4000);
     CHR.resize(header.chrROM8cnt, std::vector<uint8_t>(0x2000, 0));
+	CHRbank = 0;
 }
 
 uint8_t Mapper3::memGet(uint16_t addr)
