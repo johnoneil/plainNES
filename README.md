@@ -16,3 +16,4 @@ Controls are hardcoded at this time:
 | Start | Enter |
 | Select | Spacebar |
 | Up/Down/Left/Right | Direction Keys |
+| RESET | Ctrl-R |
