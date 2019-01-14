@@ -1214,13 +1214,13 @@ uint16_t AbsoluteX(OpType optype) {
 	if(enableLogging) opTxt += "$" + int_to_hex(addr) + ",X @ ";
 
 	if(optype == READ) {
-		if (((addr&0xFF) + X) > 0xFF) {
-			memGet(((uint16_t)addr2 << 8) | ((uint8_t)(addr+X))); //Dummy read
+		if((addr + X) != ((addr & 0xFF00) | ((addr + X) & 0xFF))) {
+			memGet((addr & 0xFF00) | ((addr + X) & 0xFF)); //Dummy read
 			tick();
 		}
 	}
 	else if(optype == WRITE || optype == READWRITE) {
-		memGet(((uint16_t)addr2 << 8) | ((uint8_t)(addr+X))); //Dummy read
+		memGet((addr & 0xFF00) | ((addr + X) & 0xFF)); //Dummy read
 		tick();
 	}
 	
@@ -1243,13 +1243,13 @@ uint16_t AbsoluteY(OpType optype) {
 	if(enableLogging) opTxt += "$" + int_to_hex(addr) + ",Y @ ";
 
 	if(optype == READ) {
-		if (((addr&0xFF) + Y) > 0xFF) {
-			memGet(((uint16_t)addr2 << 8) | ((uint8_t)(addr+Y))); //Dummy read
+		if ((addr + Y) != ((addr & 0xFF00) | ((addr + Y) & 0xFF))) {
+			memGet((addr & 0xFF00) | ((addr + Y) & 0xFF)); //Dummy read
 			tick();
 		}
 	}
 	else if(optype == WRITE || optype == READWRITE) {
-		memGet(((uint16_t)addr2 << 8) | ((uint8_t)(addr+Y))); //Dummy read
+		memGet((addr & 0xFF00) | ((addr + Y) & 0xFF)); //Dummy read
 		tick();
 	}
 	
