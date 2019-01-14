@@ -126,6 +126,15 @@ void init(bool logging) {
 	alive = true;
 }
 
+void reset() {
+	//Per https://wiki.nesdev.com/w/index.php/CPU_power_up_state
+	SP -= 3;
+	P.b.I = true;
+	memSet(0x4015, 0);
+	PPU::reset();
+	PC = memGet(0xFFFC) | memGet(0xFFFD) << 8;
+}
+
 void tick() {
 	++cycle;
 	PPU::step();

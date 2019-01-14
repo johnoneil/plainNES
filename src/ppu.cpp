@@ -98,6 +98,16 @@ void init()
 
 }
 
+void reset() {
+	//Per https://wiki.nesdev.com/w/index.php/PPU_power_up_state
+	regSet(0x2000,0);
+	regSet(0x2001,0);
+	regSet(0x2005,0);
+	VRAM_buffer = 0;
+	writeToggle = false;
+	frame = 0;
+}
+
 void step()
 {
 	//Check for skipped cycle. Occurs at 0,0 on odd frames when rendering enabled

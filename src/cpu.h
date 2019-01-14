@@ -19,6 +19,7 @@ extern unsigned long long cycle;
 extern bool enableLogging;
 
 void init(bool logging = false);
+void reset();
 void step();
 void tick();
 long long getCycles();

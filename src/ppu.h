@@ -9,6 +9,7 @@ extern unsigned int scanline;
 extern unsigned int dot; //Dots are also called cycles and can be considered the pixel column
 
 void init();
+void reset();
 void step();
 uint8_t regGet(uint16_t addr);
 void regSet(uint16_t addr, uint8_t val);

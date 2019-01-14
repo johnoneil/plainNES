@@ -2,6 +2,7 @@
 #include "render.h"
 #include "ppu.h"
 #include "io.h"
+#include "cpu.h"
 #include <SDL.h>
 #include <cstring>
 #include <array>
@@ -25,6 +26,8 @@ const uint8_t *kbState = SDL_GetKeyboardState(NULL);
 std::array<uint32_t, 256 * 240> mainpixelMap;
 std::array<uint32_t, 16*8 * 16*8> PTpixelMap;
 bool quit = false;
+bool LctrlPressed = false;
+bool RctrlPressed = false;
 
 int init()
 {
@@ -145,6 +148,12 @@ void update()
         {
             switch(event.key.keysym.sym)
             {
+                case SDLK_LCTRL:
+                    LctrlPressed = true;
+                    break;
+                case SDLK_RCTRL:
+                    RctrlPressed = true;
+                    break;
                 case SDLK_x:
                     IO::controller_state[0] |= 1;
                     break;
@@ -169,6 +178,11 @@ void update()
                 case SDLK_RIGHT:
                     IO::controller_state[0] |= (1<<7);
                     break;
+                case SDLK_r:
+                    if(LctrlPressed || RctrlPressed) {
+                        CPU::reset();
+                    }
+                    break;
                 case SDLK_ESCAPE:
                     quit = true;
                     return;
@@ -178,6 +192,12 @@ void update()
         {
             switch(event.key.keysym.sym)
             {
+                case SDLK_LCTRL:
+                    LctrlPressed = false;
+                    break;
+                case SDLK_RCTRL:
+                    RctrlPressed = false;
+                    break;
                 case SDLK_x:
                     IO::controller_state[0] &= ~1;
                     break;
