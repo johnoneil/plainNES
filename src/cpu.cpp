@@ -244,6 +244,7 @@ void step() {
 			break;
 		case 0x0A:
 			if(enableLogging) opTxt = "ASL ";
+			memGet(PC); //Dummy read of PC
 			opASL();
 			break;
 		case 0x06:
@@ -268,14 +269,17 @@ void step() {
 			break;
 		case 0x90:
 			if(enableLogging) opTxt = "BCC ";
+			memGet(PC); //Dummy read of PC
 			opBCC();
 			break;
 		case 0xB0:
 			if(enableLogging) opTxt = "BCS ";
+			memGet(PC); //Dummy read of PC
 			opBCS();
 			break;
 		case 0xF0:
 			if(enableLogging) opTxt = "BEQ ";
+			memGet(PC); //Dummy read of PC
 			opBEQ();
 			break;
 		case 0x24:
@@ -288,42 +292,52 @@ void step() {
 			break;
 		case 0x30:
 			if(enableLogging) opTxt = "BMI ";
+			memGet(PC); //Dummy read of PC
 			opBMI();
 			break;
 		case 0xD0:
 			if(enableLogging) opTxt = "BNE ";
+			memGet(PC); //Dummy read of PC
 			opBNE();
 			break;
 		case 0x10:
 			if(enableLogging) opTxt = "BPL ";
+			memGet(PC); //Dummy read of PC
 			opBPL();
 			break;	
 		case 0x00:
 			if(enableLogging) opTxt = "BRK ";
+			memGet(PC); //Dummy read of PC
 			opBRK();
 			break;
 		case 0x50:
 			if(enableLogging) opTxt = "BVC ";
+			memGet(PC); //Dummy read of PC
 			opBVC();
 			break;
 		case 0x70:
 			if(enableLogging) opTxt = "BVS ";
+			memGet(PC); //Dummy read of PC
 			opBVS();
 			break;
 		case 0x18:
 			if(enableLogging) opTxt = "CLC ";
+			memGet(PC); //Dummy read of PC
 			opCLC();
 			break;
 		case 0xD8:
 			if(enableLogging) opTxt = "CLD ";
+			memGet(PC); //Dummy read of PC
 			opCLD();
 			break;
 		case 0x58:
 			if(enableLogging) opTxt = "CLI ";
+			memGet(PC); //Dummy read of PC
 			opCLI();
 			break;
 		case 0xB8:
 			if(enableLogging) opTxt = "CLV ";
+			memGet(PC); //Dummy read of PC
 			opCLV();
 			break;
 		case 0xC9:
@@ -428,10 +442,12 @@ void step() {
 			break;
 		case 0xCA:
 			if(enableLogging) opTxt = "DEX ";
+			memGet(PC); //Dummy read of PC
 			opDEX();
 			break;
 		case 0x88:
 			if(enableLogging) opTxt = "DEY ";
+			memGet(PC); //Dummy read of PC
 			opDEY();
 			break;
 		case 0x49:
@@ -484,10 +500,12 @@ void step() {
 			break;
 		case 0xE8:
 			if(enableLogging) opTxt = "INX ";
+			memGet(PC); //Dummy read of PC
 			opINX();
 			break;
 		case 0xC8:
 			if(enableLogging) opTxt = "INY ";
+			memGet(PC); //Dummy read of PC
 			opINY();
 			break;
 		case 0xE3:
@@ -643,6 +661,7 @@ void step() {
 			break;
 		case 0x4A:
 			if(enableLogging) opTxt = "LSR ";
+			memGet(PC); //Dummy read of PC
 			opLSR();
 			break;
 		case 0x46:
@@ -719,18 +738,22 @@ void step() {
 			break;
 		case 0x48:
 			if(enableLogging) opTxt = "PHA ";
+			memGet(PC); //Dummy read of PC
 			opPHA();
 			break;
 		case 0x08:
 			if(enableLogging) opTxt = "PHP ";
+			memGet(PC); //Dummy read of PC
 			opPHP();
 			break;
 		case 0x68:
 			if(enableLogging) opTxt = "PLA ";
+			memGet(PC); //Dummy read of PC
 			opPLA();
 			break;
 		case 0x28:
 			if(enableLogging) opTxt = "PLP ";
+			memGet(PC); //Dummy read of PC
 			opPLP();
 			break;
 		case 0x23:
@@ -763,6 +786,7 @@ void step() {
 			break;
 		case 0x2A:
 			if(enableLogging) opTxt = "ROL ";
+			memGet(PC); //Dummy read of PC
 			opROL();
 			break;
 		case 0x26:
@@ -783,6 +807,7 @@ void step() {
 			break;
 		case 0x6A:
 			if(enableLogging) opTxt = "ROR ";
+			memGet(PC); //Dummy read of PC
 			opROR();
 			break;
 		case 0x66:
@@ -831,10 +856,12 @@ void step() {
 			break;	
 		case 0x40:
 			if(enableLogging) opTxt = "RTI ";
+			memGet(PC); //Dummy read of PC
 			opRTI();
 			break;
 		case 0x60:
 			if(enableLogging) opTxt = "RTS ";
+			memGet(PC); //Dummy read of PC
 			opRTS();
 			break;
 		case 0x83:
@@ -891,14 +918,17 @@ void step() {
 			break;
 		case 0x38:
 			if(enableLogging) opTxt = "SEC ";
+			memGet(PC); //Dummy read of PC
 			opSEC();
 			break;
 		case 0xF8:
 			if(enableLogging) opTxt = "SED ";
+			memGet(PC); //Dummy read of PC
 			opSED();
 			break;
 		case 0x78:
 			if(enableLogging) opTxt = "SEI ";
+			memGet(PC); //Dummy read of PC
 			opSEI();
 			break;
 		case 0x9E:
@@ -1023,26 +1053,32 @@ void step() {
 			break;
 		case 0xAA:
 			if(enableLogging) opTxt = "TAX ";
+			memGet(PC); //Dummy read of PC
 			opTAX();
 			break;
 		case 0xA8:
 			if(enableLogging) opTxt = "TAY ";
+			memGet(PC); //Dummy read of PC
 			opTAY();
 			break;
 		case 0xBA:
 			if(enableLogging) opTxt = "TSX ";
+			memGet(PC); //Dummy read of PC
 			opTSX();
 			break;
 		case 0x8A:
 			if(enableLogging) opTxt = "TXA ";
+			memGet(PC); //Dummy read of PC
 			opTXA();
 			break;
 		case 0x9A:
 			if(enableLogging) opTxt = "TXS ";
+			memGet(PC); //Dummy read of PC
 			opTXS();
 			break;
 		case 0x98:
 			if(enableLogging) opTxt = "TYA ";
+			memGet(PC); //Dummy read of PC
 			opTYA();
 			break;
 		case 0x8B:
@@ -1680,12 +1716,13 @@ void opCPY(uint16_t addr) {
 void opDCP(uint16_t addr) {
 	uint8_t M = memGet(addr);
 	tick();
-	M -= 1;
 	memSet(addr, M);
-	tick();
+	M -= 1;
 	P.b.C = (A >= M);
 	P.b.Z = (A == M);
 	P.b.N = ((uint8_t)(A-M)>>7) == 1;
+	tick();
+	memSet(addr, M);
 	tick();
 	pollInterrupts();
 }
@@ -1694,11 +1731,12 @@ void opDEC(uint16_t addr) {
 	uint8_t M = memGet(addr);
 	if(enableLogging) opTxt += int_to_hex(M);
 	tick();
-	M -= 1;
 	memSet(addr, M);
-	tick();
+	M -= 1;
 	P.b.Z = (M == 0);
 	P.b.N = (M >> 7) > 0;
+	tick();
+	memSet(addr, M);
 	tick();
 	pollInterrupts();
 }
@@ -1743,11 +1781,12 @@ void opINC(uint16_t addr) {
 	uint8_t M = memGet(addr);
 	if(enableLogging) opTxt += int_to_hex(M);
 	tick();
-	M += 1;
 	memSet(addr, M);
-	tick();
+	M += 1;
 	P.b.Z = (M == 0);
 	P.b.N = (M >> 7) > 0;
+	tick();
+	memSet(addr, M);
 	tick();
 	pollInterrupts();
 }
@@ -1957,12 +1996,13 @@ void opPLP() {
 void opRLA(uint16_t addr) {
 	uint8_t M = memGet(addr);
 	tick();
+	memSet(addr, M);
 	uint8_t C0 = P.b.C;
 	P.b.C = (M >> 7) > 0;
 	M = M << 1;
 	M |= C0;
-	memSet(addr, M);
 	tick();
+	memSet(addr, M);
 	tick();
 	A &= M;
 	P.b.Z = (A == 0);
@@ -2140,10 +2180,11 @@ void opSHY(uint16_t addr) {
 void opSLO(uint16_t addr) {
 	uint8_t M = memGet(addr);
 	tick();
+	memSet(addr, M);
 	P.b.C = (M >> 7) > 0;
 	M = M << 1;
-	memSet(addr, M);
 	tick();
+	memSet(addr, M);
 	tick();
 	A |= M;
 	P.b.Z = (A == 0);
@@ -2154,14 +2195,15 @@ void opSLO(uint16_t addr) {
 void opSRE(uint16_t addr) {
 	uint8_t M = memGet(addr);
 	tick();
+	memSet(addr, M);
 	P.b.C = M & 1;
 	M = M >> 1;
+	tick();
 	memSet(addr, M);
 	tick();
 	A ^= M;
 	P.b.Z = (A == 0);
 	P.b.N = (A >> 7) > 0;
-	tick();
 	pollInterrupts();
 }
 
