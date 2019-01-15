@@ -559,11 +559,6 @@ void renderPixel()
 void incrementHorz()
 {
 	//Will wrap around when hitting edge of nametable space
-	/*uint8_t coarseX = currVRAM_addr & 0x1F;
-	coarseX = (coarseX+1) & 0x1F;
-	currVRAM_addr = (currVRAM_addr & ~0x1F) | (coarseX);
-	if((coarseX) == 0)
-		currVRAM_addr ^= 0x0400;*/
 	++currVRAM_addr.coarseX;
 	if(currVRAM_addr.coarseX == 0)
 		currVRAM_addr.value ^= 0x0400; //Swap NT bit
@@ -574,7 +569,11 @@ void incrementVert()
 	++currVRAM_addr.fineY;
 	if(currVRAM_addr.fineY == 0) { //Overflows into coarseY
 		++currVRAM_addr.coarseY;
-		if(currVRAM_addr.coarseY == 0) {
+		if(currVRAM_addr.coarseY == 30) {
+			currVRAM_addr.coarseY = 0;
+			currVRAM_addr.value ^= 0x0800; //Swap NT bit
+		}
+		else if(currVRAM_addr.coarseY == 0) {
 			currVRAM_addr.value ^= 0x0800; //Swap NT bit
 		}
 	}
