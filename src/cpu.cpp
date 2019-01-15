@@ -1061,7 +1061,7 @@ void step() {
 			break;
 		case 0x9B:
 			if(enableLogging) opTxt = "TAS ";
-			opTAS(AbsoluteX(WRITE));
+			opTAS(AbsoluteY(WRITE));
 			break;
 		case 0xAA:
 			if(enableLogging) opTxt = "TAX ";
@@ -1352,13 +1352,13 @@ uint16_t IndirectY(OpType optype) {
 	addr |= ((uint16_t)memGet((uint8_t)(iaddr+1)) << 8);
 	tick();
 	if(optype == READ) {
-		if (((addr&0xFF) + Y) > 0xFF) {
-			memGet((addr & 0xFF00) | (((uint8_t)(addr))+Y)); //Dummy read
+		if ((addr + Y) != ((addr & 0xFF00) | ((addr + Y) & 0xFF))) {
+			memGet((addr & 0xFF00) | ((addr + Y) & 0xFF)); //Dummy read
 			tick();
 		}
 	}
 	else if(optype == WRITE || optype == READWRITE) {
-		memGet((addr & 0xFF00) | (((uint8_t)(addr))+Y)); //Dummy read
+		memGet((addr & 0xFF00) | ((addr + Y) & 0xFF)); //Dummy read
 		tick();
 	}
 	
