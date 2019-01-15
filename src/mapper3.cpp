@@ -68,8 +68,8 @@ void Mapper3::PPUmemSet(uint16_t addr, uint8_t val)
     //Mirror addresses higher than 0x3FFF
 	addr %= 0x4000;
 	if(addr < 0x2000) {
-        //Bankable CHR
-		CHR[CHRbank][addr] = val;
+		//CHRROM not writable
+		//CHR[CHRbank][addr] = val;
 	}
 	else if(addr < 0x3F00) {
 		addr = 0x2000 + addr % 0x1000;
