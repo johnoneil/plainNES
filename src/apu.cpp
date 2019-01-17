@@ -270,7 +270,7 @@ void step()
     }
     stepTriangle();
 
-    if(cycle % 75 == 0) { //Every ~48000 Hz
+    if(cycle % (int)(1789772.7272 / OUTPUT_AUDIO_FREQ) == 0) { //Downsample
         mixOutput();
     }
 
