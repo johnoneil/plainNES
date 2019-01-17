@@ -1588,11 +1588,13 @@ void opBRK() {
 		newaddr = 0xFFFA;
 		bFlag = 0x20;
 		NMI_request = NMI_triggered = false;
+		if(enableLogging) logFile << "NMI Interrupt\n";
 	}
 	else if(IRQ_triggered || IRQ_request) {
 		newaddr = 0xFFFE;
 		bFlag = 0x20;
 		IRQ_triggered = false;
+		if(enableLogging) logFile << "IRQ Interrupt\n";
 	}
 	else {
 		newaddr = 0xFFFE;

@@ -83,6 +83,7 @@ int main(int argc, char *argv[])
 				lastUpdate = boost::chrono::high_resolution_clock::now();
 				frames = 0;
 				//avgFPS = 1000000000.0f/(avgFrameDuration_ns.count());
+				//std::cout << avgFPS << std::endl;
 				//cmdFPS = 1000000000.0f/(commandedFrameDuration_ns.count());
 			
 				if(avgFrameDuration_ns > (targetFrameDuration_ns)) {
@@ -95,8 +96,10 @@ int main(int argc, char *argv[])
 
 			GUI::update();
 			PPU::setframeReady(false);
-			while(PPU::isframeReady() == 0)
+			while(PPU::isframeReady() == 0) {
 				CPU::step();
+				if(APU::audioBufferReady) GUI::updateAudio();
+			}
 			
 			frame_end = boost::chrono::high_resolution_clock::now();
 			boost::this_thread::sleep_until(frame_start + commandedFrameDuration_ns);

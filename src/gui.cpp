@@ -3,13 +3,17 @@
 #include "ppu.h"
 #include "io.h"
 #include "cpu.h"
+#include "apu.h"
 #include <SDL.h>
 #include <cstring>
 #include <array>
+#include <iostream>
 
 namespace GUI {
 
 #define SCREEN_SCALE 2
+const uint16_t samples = 4096;
+const uint16_t maxVolume = 1;
 
 SDL_Window *mainwindow;
 SDL_Window *PPUwindow;
@@ -33,7 +37,7 @@ int init()
 {
     RENDER::init();
 
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_NOPARACHUTE) < 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_NOPARACHUTE) < 0) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize SDL: %s", SDL_GetError());
         return 1;
     }
@@ -45,6 +49,11 @@ int init()
 
     if(initPPUWindow()) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize Main Window: %s", SDL_GetError());
+        return 1;
+    }
+
+    if(initAudio()) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize Audio: %s", SDL_GetError());
         return 1;
     }
 
@@ -135,6 +144,19 @@ int initPPUWindow() {
     SDL_RenderPresent(PPUrenderer);
 
     return 0;
+}
+
+int initAudio() {
+    SDL_AudioSpec audioSpec;
+    audioSpec.freq = APU::OUTPUT_AUDIO_FREQ;
+    audioSpec.format = AUDIO_U16;
+    audioSpec.channels = 1;
+    audioSpec.callback = NULL;
+
+    int returnVal = SDL_OpenAudio(&audioSpec, NULL);
+    SDL_PauseAudio(0);
+
+    return returnVal;
 }
 
 void update()
@@ -269,6 +291,11 @@ void updatePPUWindow() {
     }
 
     SDL_RenderPresent(PPUrenderer);
+}
+
+void updateAudio() {
+    SDL_QueueAudio(1, APU::outputBufferPtr, APU::OUTPUT_AUDIO_BUFFER_SIZE*sizeof(uint16_t));
+    APU::audioBufferReady = false;
 }
 
 void close()
