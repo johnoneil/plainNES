@@ -67,8 +67,8 @@ struct NoiseReg0 {
 struct NoiseReg1 {
 	union {
 		uint8_t value;
-        BitWorker<0, 4> noisePeriod;
-        BitWorker<7, 1> loopNoise;
+        BitWorker<0, 4> noisePeriodSel;
+        BitWorker<7, 1> noiseMode;
 	};
 }  noiseReg1;
 
@@ -163,11 +163,26 @@ std::array<int,8> dutyCyclePulse2;
 
 //Triangle
 uint8_t triangle_lenCntr;
+uint8_t triangle_linearCntr;
+bool triangle_linearCntrReload = false;
 uint8_t outputTriangle;
+uint16_t timerSetTriangle;
+uint16_t timerTriangle;
+std::array<uint8_t, 32> triangleOutputArray {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
+                                     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+uint8_t triangleOutputArrayIdx = 0;
 
 //Noise
+uint8_t noiseVolume = 0;
+uint8_t noiseEnvDecay = 0;
+bool noiseRestartEnv = false;
+uint8_t noiseEnvDivider = 0;
 uint8_t noise_lenCntr;
+uint16_t noiseShiftRegister;
+uint16_t timerNoise;
 uint8_t outputNoise;
+std::array<uint16_t, 16> noiseTimerTable {0x04, 0x08, 0x10, 0x20, 0x40, 0x60, 0x80, 0xA0,
+                                          0xCA, 0xFE, 0x17C, 0x1FC, 0x2FA, 0x3F8, 0x7F2, 0xFE4};
 
 //DMC
 bool DMCinterruptRequest = false;
@@ -211,6 +226,7 @@ void init()
     for(uint16_t addr = 0x4000; addr < 0x4010; ++addr)
         regSet(addr, 0);
     frameHalfCycle = 0;
+    noiseShiftRegister = 1;
 }
 
 void step()
@@ -218,17 +234,17 @@ void step()
     switch(frameHalfCycle) {
         case 7457: //3728.5 full cycles
             clockEnvelopes();
-            //triangle linear counter
+            clockLinearCounter();
             break;
         case 14913: //7456.5 full cycles
             clockEnvelopes();
-            //triangle linear counter
+            clockLinearCounter();
             clockLengthCounters();
             clockSweep();
             break;
         case 22371: //11185.5 full cycles
             clockEnvelopes();
-            //triangle linear counter
+            clockLinearCounter();
             break;
         case 29828: //14914 full cycles
             if(frameReg.frameMode == 0) {
@@ -239,7 +255,7 @@ void step()
             if(frameReg.frameMode == 0) {
                 if(frameReg.IRQinhibit == 0) frameInterruptRequest = true;
                 clockEnvelopes();
-                //triangle linear counter
+                clockLinearCounter();
                 clockLengthCounters();
                 clockSweep();
             }
@@ -252,7 +268,7 @@ void step()
             break;
         case 37281: //18640.5 full cycles
             clockEnvelopes();
-            //triangle linear counter
+            clockLinearCounter();
             clockLengthCounters();
             clockSweep();
             break;
@@ -361,6 +377,28 @@ void clockEnvelopes() {
         }
     }
     if(pulse2Reg0.constVol == 0) pulse2Volume = pulse2EnvDecay;
+
+    //Noise
+    if(noiseRestartEnv) {
+        noiseRestartEnv = false;
+        noiseEnvDecay = 15;
+        noiseEnvDivider = noiseReg0.volPeriod + 1;
+    }
+    else {
+        if(noiseEnvDivider == 0) {
+            noiseEnvDivider = noiseReg0.volPeriod + 1;
+            if(noiseEnvDecay == 0 && noiseReg0.disableLenCtr) {
+                noiseEnvDecay = 15;
+            }
+            else if(noiseEnvDecay > 0) {
+                --noiseEnvDecay;
+            }
+        }
+        else {
+            --noiseEnvDivider;
+        }
+    }
+    if(noiseReg0.constVol == 0) noiseVolume = noiseEnvDecay;
 }
 
 void clockSweep() {
@@ -416,6 +454,15 @@ void clockSweep() {
         pulse2SweepMute = false;
 }
 
+void clockLinearCounter() {
+    if(triangle_linearCntrReload)
+        triangle_linearCntr = triReg0.linCtrReloadVal;
+    else if(triangle_linearCntr > 0)
+        --triangle_linearCntr;
+    if(triReg0.lenCtrDisable == 0)
+        triangle_linearCntrReload = false;
+}
+
 uint8_t regGet(uint16_t addr)
 {   
     if(addr == 0x4015) {
@@ -447,7 +494,6 @@ void regSet(uint16_t addr, uint8_t val)
             break;
         case 0x4002:
             timerSetPulse1 = (timerSetPulse1 & 0x700) | val;
-            timerPulse1 = timerSetPulse1;
             break;
         case 0x4003:
             pulse1Reg3.value = val;
@@ -468,7 +514,6 @@ void regSet(uint16_t addr, uint8_t val)
             break;
         case 0x4006:
             timerSetPulse2 = (timerSetPulse2 & 0x700) | val;
-            timerPulse2 = timerSetPulse2;
             break;
         case 0x4007:
             pulse2Reg3.value = val;
@@ -482,23 +527,32 @@ void regSet(uint16_t addr, uint8_t val)
             triReg0.value = val;
             break;
         case 0x400A:
-            //TODO: Implement triangle timer
+            timerSetTriangle = (timerSetTriangle & 0x700) | val;
             break;
         case 0x400B:
             triReg2.value = val;
+            timerSetTriangle = (((uint16_t)triReg2.timerHigh) << 8) | (timerSetTriangle & 0xFF);
             if(controlReg.enableLCtriangle) triangle_lenCntr = lengthCounterArray[triReg2.lenCtrLoad];
+            timerTriangle = timerSetTriangle;
+            triangle_linearCntrReload = true;
             break;
         case 0x400C:
             noiseReg0.value = val;
             break;
         case 0x400E:
-            //TODO: Implement noise features
+            noiseReg1.value = val;
             break;
         case 0x400F:
-            //TODO: Implement noise features
+            noiseReg2.value = val;
+            noiseRestartEnv = true;
             break;
         case 0x4015:
             controlReg.value = val;
+            if(controlReg.enableLCpulse1 == 0) pulse1_lenCntr = 0;
+            if(controlReg.enableLCpulse2 == 0) pulse2_lenCntr = 0;
+            if(controlReg.enableLCtriangle == 0) triangle_lenCntr = 0;
+            if(controlReg.enableLCnoise == 0) noise_lenCntr = 0;
+            //TODO: Set DMC disable/enable
             break;
         case 0x4017:
             frameReg.value = val;
@@ -547,13 +601,38 @@ void stepPulse2() {
 }
 
 void stepTriangle() {
-    //TODO: Implement channel
-    outputTriangle = 0;
+    if(timerTriangle > 0) {
+        --timerTriangle;
+    }
+    else {
+        timerTriangle = timerSetTriangle;
+        if(triangle_lenCntr > 0 && triangle_linearCntr > 0) {
+            ++triangleOutputArrayIdx;
+            if(triangleOutputArrayIdx >= 32) triangleOutputArrayIdx = 0;
+        }
+    }
+    outputTriangle = triangleOutputArray[triangleOutputArrayIdx];
 }
 
 void stepNoise() {
-    //TODO: Implement channel
-    outputNoise = 0;
+    uint16_t feedback;
+    if(timerNoise > 0) {
+        --timerNoise;
+    }
+    else {
+        timerNoise = noiseTimerTable[noiseReg1.noisePeriodSel];
+        //Calculate pseudorandom number
+        if(noiseReg1.noiseMode == 0)
+            feedback = (noiseShiftRegister & 1) ^ ((noiseShiftRegister >> 1) & 1);
+        else
+            feedback = (noiseShiftRegister & 1) ^ ((noiseShiftRegister >> 6) & 1);
+        noiseShiftRegister >>= 1;
+        noiseShiftRegister = (noiseShiftRegister & !0x4000) | (feedback << 14);
+    }
+    if(((noiseShiftRegister & 1) == 0) && noise_lenCntr > 0)
+        outputNoise = noiseVolume;
+    else
+        outputNoise = 0;
 }
 
 void stepDMC() {
