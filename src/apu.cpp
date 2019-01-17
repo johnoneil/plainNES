@@ -1,25 +1,183 @@
 #include "apu.h"
 #include "cpu.h"
+#include "utils.h"
 #include <array>
 #include <iostream>
 
 namespace APU {
 
-bool enablePulse1, enablePulse2, enableNoise, enableTriangle, enableDMC;  
-bool haltPulse1LC, haltPulse2LC, haltNoiseLC, haltTriangleLC;
-bool constVolPulse1, constVolPulse2;
-bool sweepEnPulse1, sweepEnPulse2;
-bool sweepNPulse1, sweepNPulse2;
-bool DMCinterruptInhibit, frameInterruptInhibit;
-bool DMCinterruptRequest, frameInterruptRequest;
-bool fiveFrameMode;
-uint8_t pulse1_lenCntr, pulse2_lenCntr, triangle_lenCntr, noise_lenCntr;
-uint8_t volPeriodPulse1, volPeriodPulse2;
-uint8_t sweepPeriodPulse1, sweepPeriodPulse2;
-uint8_t sweepShiftPulse1, sweepShiftPulse2;
-uint16_t timerPulse1, timerPulse2, timerSetPulse1, timerSetPulse2;
-uint8_t outputPulse1, outputPulse2, outputTriangle, outputNoise, outputDMC;
-int dutyIdxPulse1, dutyIdxPulse2;
+//Registers
+struct PulseReg0 {
+	union {
+		uint8_t value;
+        BitWorker<0, 4> volPeriod;
+        BitWorker<4, 1> constVol;
+        BitWorker<5, 1> loopDisableLC;
+        BitWorker<6, 2> dutyCycleSel;
+	};
+}  pulse1Reg0, pulse2Reg0;
+
+struct PulseReg1 {
+	union {
+		uint8_t value;
+        BitWorker<0, 3> sweepShiftCount;
+        BitWorker<3, 1> sweepNegative;
+        BitWorker<4, 3> sweepPeriod;
+        BitWorker<7, 1> sweepEnable;
+	};
+}  pulse1Reg1, pulse2Reg1;
+
+uint8_t pulse1TimerLow, pulse2TimerLow;
+
+struct PulseReg3 {
+	union {
+		uint8_t value;
+        BitWorker<0, 3> timerHigh;
+        BitWorker<3, 5> lenCtrLoad;
+	};
+}  pulse1Reg3, pulse2Reg3;
+
+struct TriReg0 {
+	union {
+		uint8_t value;
+        BitWorker<0, 7> linCtrReloadVal;
+        BitWorker<7, 1> lenCtrDisable;
+	};
+}  triReg0;
+
+uint8_t triangleTimerLow;
+
+struct TriReg2 {
+	union {
+		uint8_t value;
+        BitWorker<0, 3> timerHigh;
+        BitWorker<3, 5> lenCtrLoad;
+	};
+}  triReg2;
+
+struct NoiseReg0 {
+	union {
+		uint8_t value;
+        BitWorker<0, 4> volPeriod;
+        BitWorker<4, 1> constVol;
+        BitWorker<5, 1> disableLenCtr;
+	};
+}  noiseReg0;
+
+struct NoiseReg1 {
+	union {
+		uint8_t value;
+        BitWorker<0, 4> noisePeriod;
+        BitWorker<7, 1> loopNoise;
+	};
+}  noiseReg1;
+
+struct NoiseReg2 {
+	union {
+		uint8_t value;
+        BitWorker<3, 5> lenCtrLoad;
+	};
+}  noiseReg2;
+
+struct DMCReg0 {
+	union {
+		uint8_t value;
+        BitWorker<0, 4> freqIdx;
+        BitWorker<6, 1> loopSample;
+        BitWorker<7, 1> IRQenable;
+	};
+}  dmcReg0;
+
+struct DMCReg1 {
+	union {
+		uint8_t value;
+        BitWorker<0, 7> directLoad;
+	};
+}  dmcReg1;
+
+uint16_t dmcSampleAddr;
+uint16_t dmcSampleLen;
+
+struct ControlReg {
+	union {
+		uint8_t value;
+        BitWorker<0, 1> enableLCpulse1;
+        BitWorker<1, 1> enableLCpulse2;
+        BitWorker<2, 1> enableLCtriangle;
+        BitWorker<3, 1> enableLCnoise;
+        BitWorker<4, 1> enableDMC;
+	};
+}  controlReg;
+
+struct StatusReg {
+	union {
+		uint8_t value;
+        BitWorker<0, 1> LCpulse1;
+        BitWorker<1, 1> LCpulse2;
+        BitWorker<2, 1> LCtriangle;
+        BitWorker<3, 1> LCnoise;
+        BitWorker<4, 1> DMCactive;
+        BitWorker<5, 1> openBus;
+        BitWorker<6, 1> frameIRQ;
+        BitWorker<7, 1> dmcIRQ;
+	};
+}  statusReg;
+
+struct FrameReg {
+	union {
+		uint8_t value;
+        BitWorker<6, 1> IRQinhibit;
+        BitWorker<7, 1> frameMode;
+	};
+}  frameReg;
+
+//Pulse 1
+uint8_t pulse1Volume = 0;
+uint8_t pulse1EnvDecay = 0;
+bool pulse1RestartEnv = false;
+uint8_t pulse1EnvDivider = 0;
+uint8_t pulse1SweepDivider = 0;
+bool pulse1SweepMute = false;
+bool pulse1SweepReload = false;
+uint8_t pulse1_lenCntr;
+uint16_t timerSetPulse1;
+uint16_t timerPulse1;
+uint8_t outputPulse1;
+int dutyIdxPulse1;
+std::array<int,8> dutyCyclePulse1;
+
+//Pulse 2
+uint8_t pulse2Volume = 0;
+uint8_t pulse2EnvDecay = 0;
+bool pulse2RestartEnv = false;
+uint8_t pulse2EnvDivider = 0;
+uint8_t pulse2SweepDivider = 0;
+bool pulse2SweepMute = false;
+bool pulse2SweepReload = false;
+uint8_t pulse2_lenCntr;
+uint16_t timerSetPulse2;
+uint16_t timerPulse2;
+uint8_t outputPulse2;
+int dutyIdxPulse2;
+std::array<int,8> dutyCyclePulse2;
+
+//Triangle
+uint8_t triangle_lenCntr;
+uint8_t outputTriangle;
+
+//Noise
+uint8_t noise_lenCntr;
+uint8_t outputNoise;
+
+//DMC
+bool DMCinterruptRequest = false;
+uint8_t outputDMC;
+
+//Frame Counter
+bool frameInterruptRequest = false;
+
+
+
 unsigned int frameHalfCycle;
 unsigned long long cycle = 0;
 
@@ -28,8 +186,6 @@ int outputBufferIdx = 0;
 int outputBufferSel = 0;
 uint16_t* outputBufferPtr;
 std::array<std::array<uint16_t, OUTPUT_AUDIO_BUFFER_SIZE>,2> outputBuffers;
-
-std::array<int,8> dutyCyclePulse1, dutyCyclePulse2;
 
 std::array<uint8_t,0x20> lengthCounterArray = {
     10, 254, 20, 2, 40, 4, 80, 6, 160, 8, 60, 10, 14, 12, 26, 14,
@@ -61,35 +217,44 @@ void step()
 {
     switch(frameHalfCycle) {
         case 7457: //3728.5 full cycles
-            //inc envelopes and triangle linear counter
+            clockEnvelopes();
+            //triangle linear counter
             break;
         case 14913: //7456.5 full cycles
-            //inc envelopes and triangle linear counter
-            decLengthCounters();
+            clockEnvelopes();
+            //triangle linear counter
+            clockLengthCounters();
+            clockSweep();
             break;
         case 22371: //11185.5 full cycles
-            //inc envelopes and triangle linear counter
+            clockEnvelopes();
+            //triangle linear counter
             break;
         case 29828: //14914 full cycles
-            if(fiveFrameMode == 0) {
-                if(frameInterruptInhibit == 0) frameInterruptRequest = true;
+            if(frameReg.frameMode == 0) {
+                if(frameReg.IRQinhibit == 0) frameInterruptRequest = true;
             }
             break;
         case 29829: //14914.5 full cycles
-            if(fiveFrameMode == 0) {
-                if(frameInterruptInhibit == 0) frameInterruptRequest = true;
-                decLengthCounters();
+            if(frameReg.frameMode == 0) {
+                if(frameReg.IRQinhibit == 0) frameInterruptRequest = true;
+                clockEnvelopes();
+                //triangle linear counter
+                clockLengthCounters();
+                clockSweep();
             }
             break;
         case 29830: //14915 full cycles
-            if(fiveFrameMode == 0) {
-                if(frameInterruptInhibit == 0) frameInterruptRequest = true;
+            if(frameReg.frameMode == 0) {
+                if(frameReg.IRQinhibit == 0) frameInterruptRequest = true;
                 frameHalfCycle = 0;
             }
             break;
         case 37281: //18640.5 full cycles
-            //inc envelopes and trianble linear counter
-            decLengthCounters();
+            clockEnvelopes();
+            //triangle linear counter
+            clockLengthCounters();
+            clockSweep();
             break;
         case 37282: //18641 full cycles
             frameHalfCycle = 0;
@@ -97,14 +262,13 @@ void step()
     }
     ++frameHalfCycle;
 
-    if(cycle % 2 == 0) { //On even frameHalfCycles clock channels
+    if(cycle % 2 == 0) { //On every other clock cycle
         stepPulse1();
         stepPulse2();
-        //TODO: May not trigger every other frameHalfCycle. Placeholder for now
-        stepTriangle();
         stepNoise();
         stepDMC();
     }
+    stepTriangle();
 
     if(cycle % 75 == 0) { //Every ~48000 Hz
         mixOutput();
@@ -125,46 +289,146 @@ void step()
 }
 
 
-void decLengthCounters()
+void clockLengthCounters()
 {
     if(pulse1_lenCntr) {
-        if(enablePulse1 == 0)
+        if(controlReg.enableLCpulse1 == 0)
             pulse1_lenCntr = 0;
-        else if(haltPulse1LC == 0)
+        else if(pulse1Reg0.loopDisableLC == 0)
             --pulse1_lenCntr;
     }
     if(pulse2_lenCntr) {
-        if(enablePulse2 == 0)
+        if(controlReg.enableLCpulse2 == 0)
             pulse2_lenCntr = 0;
-        else if(haltPulse2LC == 0)
+        else if(pulse2Reg0.loopDisableLC == 0)
             --pulse2_lenCntr;
     }
     if(noise_lenCntr) {
-        if(enableNoise == 0)
+        if(controlReg.enableLCnoise == 0)
             noise_lenCntr = 0;
-        else if(haltNoiseLC == 0)
+        else if(noiseReg0.disableLenCtr == 0)
             --noise_lenCntr;
     }
     if(triangle_lenCntr) {
-        if(enableTriangle == 0)
+        if(controlReg.enableLCtriangle == 0)
             triangle_lenCntr = 0;
-        else if(haltTriangleLC == 0)
+        else if(triReg0.lenCtrDisable == 0)
             --triangle_lenCntr;
     }
+}
+
+void clockEnvelopes() {
+    //Pulse 1
+    if(pulse1RestartEnv) {
+        pulse1RestartEnv = false;
+        pulse1EnvDecay = 15;
+        pulse1EnvDivider = pulse1Reg0.volPeriod + 1;
+    }
+    else {
+        if(pulse1EnvDivider == 0) {
+            pulse1EnvDivider = pulse1Reg0.volPeriod + 1;
+            if(pulse1EnvDecay == 0 && pulse1Reg0.loopDisableLC) {
+                pulse1EnvDecay = 15;
+            }
+            else if(pulse1EnvDecay > 0) {
+                --pulse1EnvDecay;
+            }
+        }
+        else {
+            --pulse1EnvDivider;
+        }
+    }
+    if(pulse1Reg0.constVol == 0) pulse1Volume = pulse1EnvDecay;
+
+    //Pulse 2
+    if(pulse2RestartEnv) {
+        pulse2RestartEnv = false;
+        pulse2EnvDecay = 15;
+        pulse2EnvDivider = pulse2Reg0.volPeriod + 1;
+    }
+    else {
+        if(pulse2EnvDivider == 0) {
+            pulse2EnvDivider = pulse2Reg0.volPeriod + 1;
+            if(pulse2EnvDecay == 0 && pulse2Reg0.loopDisableLC) {
+                pulse2EnvDecay = 15;
+            }
+            else if(pulse2EnvDecay > 0) {
+                --pulse2EnvDecay;
+            }
+        }
+        else {
+            --pulse2EnvDivider;
+        }
+    }
+    if(pulse2Reg0.constVol == 0) pulse2Volume = pulse2EnvDecay;
+}
+
+void clockSweep() {
+    int16_t periodDelta;
+    //Pulse 1
+    if(pulse1SweepDivider == 0) {
+        if(pulse1Reg1.sweepEnable && pulse1SweepMute == 0) {
+            //Modify the period
+            periodDelta = timerSetPulse1 >> pulse1Reg1.sweepShiftCount;
+            if(pulse1Reg1.sweepNegative) periodDelta = -periodDelta - 1;
+            timerSetPulse1 = timerPulse1 + periodDelta;
+            timerSetPulse1 &= 0x7FF;
+        }
+    }
+    if(pulse1SweepDivider == 0 || pulse1SweepReload) {
+        pulse1SweepDivider = pulse1Reg1.sweepPeriod;
+        pulse1SweepReload = false;
+    }
+    else {
+        --pulse1SweepDivider;
+    }
+    //Check if channel should be muted
+    if(timerPulse1 < 8)
+        pulse1SweepMute = true;
+    else if(pulse1Reg1.sweepNegative == 0 && (timerSetPulse1 + (timerSetPulse1 >> pulse1Reg1.sweepShiftCount) > 0x7FF))
+        pulse1SweepMute = true;
+    else
+        pulse1SweepMute = false;
+    
+    //Pulse 2
+    if(pulse2SweepDivider == 0) {
+        if(pulse2Reg1.sweepEnable && pulse2SweepMute == 0) {
+            //Modify the period
+            periodDelta = timerSetPulse2 >> pulse2Reg1.sweepShiftCount;
+            if(pulse2Reg1.sweepNegative) periodDelta = -periodDelta;
+            timerSetPulse2 = timerPulse2 + periodDelta;
+            timerSetPulse2 &= 0x7FF;
+        }
+    }
+    if(pulse2SweepDivider == 0 || pulse2SweepReload) {
+        pulse2SweepDivider = pulse2Reg1.sweepPeriod;
+        pulse2SweepReload = false;
+    }
+    else {
+        --pulse2SweepDivider;
+    }
+    //Check if channel should be muted
+    if(timerPulse2 < 8)
+        pulse2SweepMute = true;
+    else if(pulse2Reg1.sweepNegative == 0 && (timerSetPulse2 + (timerSetPulse2 >> pulse2Reg1.sweepShiftCount) > 0x7FF))
+        pulse2SweepMute = true;
+    else
+        pulse2SweepMute = false;
 }
 
 uint8_t regGet(uint16_t addr)
 {   
     if(addr == 0x4015) {
-        uint8_t val = ((DMCinterruptRequest) ? 1 : 0) << 7;
-        val |= ((frameInterruptRequest) ? 1 : 0) << 6;
-        //TODO: DMC bytes remaining
-        val |= ((noise_lenCntr>0) ? 1 : 0) << 3;
-        val |= ((triangle_lenCntr>0) ? 1 : 0) << 2;
-        val |= ((pulse2_lenCntr>0) ? 1 : 0) << 1;
-        val |= ((pulse1_lenCntr>0) ? 1: 0);
+        statusReg.LCpulse1 = ((pulse1_lenCntr>0) ? 1: 0);
+        statusReg.LCpulse2 = ((pulse2_lenCntr>0) ? 1: 0);
+        statusReg.LCtriangle = ((triangle_lenCntr>0) ? 1: 0);
+        statusReg.LCnoise = ((noise_lenCntr>0) ? 1: 0);
+        statusReg.DMCactive = 0; //TODO: check DMC bytes remaining
+        statusReg.frameIRQ = ((frameInterruptRequest) ? 1 : 0);
+        statusReg.dmcIRQ = ((DMCinterruptRequest) ? 1 : 0);
+        statusReg.openBus = CPU::busVal >> 5;
         frameInterruptRequest = false;
-        return val;
+        return statusReg.value;
     }
     return CPU::busVal; //Open bus behavior
 }
@@ -173,75 +437,76 @@ void regSet(uint16_t addr, uint8_t val)
 {
     switch(addr) {
         case 0x4000:
-            dutyCyclePulse1 = pulseDutyCycleTable[val >> 6];
-            haltPulse1LC = (val & 0x20) > 0;
-            constVolPulse1 = (val & 0x10) > 0;
-            volPeriodPulse1 = (val & 0x0F);
+            pulse1Reg0.value = val;
+            dutyCyclePulse1 = pulseDutyCycleTable[pulse1Reg0.dutyCycleSel];
+            if(pulse1Reg0.constVol) pulse1Volume = pulse1Reg0.volPeriod;
+            else pulse1Volume = pulse1EnvDecay;
             break;
         case 0x4001:
-            sweepEnPulse1 = (val & 0x80) > 0;
-            sweepPeriodPulse1 = (val >> 4) & 0x7;
-            sweepNPulse1 = (val & 0x8) > 0;
-            sweepShiftPulse1 = val & 0x7;
+            pulse1Reg1.value = val;
             break;
         case 0x4002:
-            timerSetPulse1 = (timerPulse1 & 0x700) | val;
+            timerSetPulse1 = (timerSetPulse1 & 0x700) | val;
+            timerPulse1 = timerSetPulse1;
             break;
         case 0x4003:
-            timerSetPulse1 = (((uint16_t)val & 0x7) << 8) | (timerPulse1 & 0xFF);
-            if(enablePulse1) pulse1_lenCntr = lengthCounterArray[val >> 3];
+            pulse1Reg3.value = val;
+            timerSetPulse1 = (((uint16_t)pulse1Reg3.timerHigh) << 8) | (timerSetPulse1 & 0xFF);
+            if(controlReg.enableLCpulse1) pulse1_lenCntr = lengthCounterArray[pulse1Reg3.lenCtrLoad];
             timerPulse1 = timerSetPulse1;
             dutyIdxPulse1 = 0;
-            //TODO: restart envelope
+            pulse1RestartEnv = true;
             break;
         case 0x4004:
-            dutyCyclePulse2 = pulseDutyCycleTable[val >> 6];
-            haltPulse2LC = (val & 0x20) > 0;
-            constVolPulse2 = (val & 0x10) > 0;
-            volPeriodPulse2 = (val & 0x0F);
+            pulse2Reg0.value = val;
+            dutyCyclePulse2 = pulseDutyCycleTable[pulse2Reg0.dutyCycleSel];
+            if(pulse2Reg0.constVol) pulse2Volume = pulse2Reg0.volPeriod;
+            else pulse2Volume = pulse2EnvDecay;
             break;
         case 0x4005:
-            sweepEnPulse2 = (val & 0x80) > 0;
-            sweepPeriodPulse2 = (val >> 4) & 0x7;
-            sweepNPulse2 = (val & 0x8) > 0;
-            sweepShiftPulse2 = val & 0x7;
+            pulse2Reg1.value = val;
             break;
         case 0x4006:
-            timerSetPulse1 = (timerPulse1 & 0x700) | val;
+            timerSetPulse2 = (timerSetPulse2 & 0x700) | val;
+            timerPulse2 = timerSetPulse2;
             break;
         case 0x4007:
-            timerSetPulse2 = (((uint16_t)val & 0x7) << 8) | (timerPulse2 & 0xFF);
-            if(enablePulse2) pulse2_lenCntr = lengthCounterArray[val >> 3];
+            pulse2Reg3.value = val;
+            timerSetPulse2 = (((uint16_t)pulse2Reg3.timerHigh) << 8) | (timerSetPulse2 & 0xFF);
+            if(controlReg.enableLCpulse2) pulse2_lenCntr = lengthCounterArray[pulse2Reg3.lenCtrLoad];
+            timerPulse2 = timerSetPulse2;
             dutyIdxPulse2 = 0;
-            //TODO: restart envelope
+            pulse2RestartEnv = true;
             break;
         case 0x4008:
-            haltTriangleLC = (val & 0x80) > 0;
+            triReg0.value = val;
+            break;
+        case 0x400A:
+            //TODO: Implement triangle timer
             break;
         case 0x400B:
-            if(enableTriangle) triangle_lenCntr = lengthCounterArray[val >> 3];
+            triReg2.value = val;
+            if(controlReg.enableLCtriangle) triangle_lenCntr = lengthCounterArray[triReg2.lenCtrLoad];
             break;
         case 0x400C:
-            haltTriangleLC = (val & 0x20) > 0;
+            noiseReg0.value = val;
+            break;
+        case 0x400E:
+            //TODO: Implement noise features
             break;
         case 0x400F:
-            if(enableTriangle) triangle_lenCntr = lengthCounterArray[val >> 3];
+            //TODO: Implement noise features
             break;
         case 0x4015:
-            enableDMC = (val & 0x10) > 0;
-            enableNoise = (val & 8) > 0;
-            enableTriangle = (val & 4) > 0;
-            enablePulse2 = (val & 2) > 0;
-            enablePulse1 = (val & 1) > 0;
+            controlReg.value = val;
             break;
         case 0x4017:
-            fiveFrameMode = (val & 0x80) > 0;
-            frameInterruptInhibit = (val & 0x40) > 0;
-            if(frameInterruptInhibit) frameInterruptRequest = false;
+            frameReg.value = val;
+            if(frameReg.IRQinhibit) frameInterruptRequest = false;
             frameHalfCycle = 0;
-            if(fiveFrameMode) { //Clock immediately
+            if(frameReg.frameMode) { //Clock immediately
                 //inc envelopes and trianble linear counter
-                decLengthCounters();
+                clockLengthCounters();
             }
             break;
     }
@@ -256,8 +521,8 @@ void stepPulse1() {
         dutyIdxPulse1 = (dutyIdxPulse1 + 1) % 8;
     }
 
-    if(pulse1_lenCntr > 0) {
-        outputPulse1 = dutyCyclePulse1[dutyIdxPulse1] * volPeriodPulse1;
+    if(pulse1_lenCntr > 0 && pulse1SweepMute == 0) {
+        outputPulse1 = dutyCyclePulse1[dutyIdxPulse1] * pulse1Volume;
     }
     else {
         outputPulse1 = 0;
@@ -273,8 +538,8 @@ void stepPulse2() {
         dutyIdxPulse2 = (dutyIdxPulse2 + 1) % 8;
     }
 
-    if(pulse2_lenCntr > 0) {
-        outputPulse2 = dutyCyclePulse2[dutyIdxPulse2] * volPeriodPulse2;
+    if(pulse2_lenCntr > 0 && pulse2SweepMute == 0) {
+        outputPulse2 = dutyCyclePulse2[dutyIdxPulse2] * pulse2Reg0.volPeriod;
     }
     else {
         outputPulse2 = 0;
