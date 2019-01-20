@@ -95,8 +95,8 @@ struct DMCReg1 {
 	};
 }  dmcReg1;
 
-uint16_t dmcSampleAddr;
-uint16_t dmcSampleLen;
+uint16_t dmcTargetAddr;
+uint16_t dmcTargetLen;
 
 struct ControlReg {
 	union {
@@ -185,14 +185,20 @@ std::array<uint16_t, 16> noiseTimerTable {0x04, 0x08, 0x10, 0x20, 0x40, 0x60, 0x
                                           0xCA, 0xFE, 0x17C, 0x1FC, 0x2FA, 0x3F8, 0x7F2, 0xFE4};
 
 //DMC
+uint16_t timerDMC;
+uint16_t dmcCurrAddr;
+uint16_t dmcBytesRemaining = 0;
+uint8_t dmcBuffer = 0;
+uint8_t dmcShiftRegister = 0;
+uint8_t dmcBitsRemaining = 0;
+bool dmcSilence = true;
 bool DMCinterruptRequest = false;
-uint8_t outputDMC;
+uint8_t outputDMC = 0;
+std::array<uint16_t, 16> dmcRateTable {428, 380, 340, 320, 286, 254, 226, 214,
+                                       190, 160, 142, 128, 106, 84, 72, 54};
 
 //Frame Counter
 bool frameInterruptRequest = false;
-
-
-
 unsigned int frameHalfCycle;
 unsigned long long cycle = 0;
 
@@ -466,11 +472,11 @@ void clockLinearCounter() {
 uint8_t regGet(uint16_t addr)
 {   
     if(addr == 0x4015) {
-        statusReg.LCpulse1 = ((pulse1_lenCntr>0) ? 1: 0);
-        statusReg.LCpulse2 = ((pulse2_lenCntr>0) ? 1: 0);
-        statusReg.LCtriangle = ((triangle_lenCntr>0) ? 1: 0);
-        statusReg.LCnoise = ((noise_lenCntr>0) ? 1: 0);
-        statusReg.DMCactive = 0; //TODO: check DMC bytes remaining
+        statusReg.LCpulse1 = ((pulse1_lenCntr>0) ? 1 : 0);
+        statusReg.LCpulse2 = ((pulse2_lenCntr>0) ? 1 : 0);
+        statusReg.LCtriangle = ((triangle_lenCntr>0) ? 1 : 0);
+        statusReg.LCnoise = ((noise_lenCntr>0) ? 1 : 0);
+        statusReg.DMCactive = ((dmcBytesRemaining > 0) ? 1 : 0);
         statusReg.frameIRQ = ((frameInterruptRequest) ? 1 : 0);
         statusReg.dmcIRQ = ((DMCinterruptRequest) ? 1 : 0);
         statusReg.openBus = CPU::busVal >> 5;
@@ -546,21 +552,43 @@ void regSet(uint16_t addr, uint8_t val)
             noiseReg2.value = val;
             noiseRestartEnv = true;
             break;
+        case 0x4010:
+            dmcReg0.value = val;
+            if(dmcReg0.IRQenable == 0) DMCinterruptRequest = false;
+            break;
+        case 0x4011:
+            dmcReg1.value = val;
+            outputDMC = dmcReg1.directLoad;
+            break;
+        case 0x4012:
+            dmcTargetAddr = 0xC000 + (val * 64);
+            break;
+        case 0x4013:
+            dmcTargetLen = (val * 16) + 1;
+            break;
         case 0x4015:
             controlReg.value = val;
             if(controlReg.enableLCpulse1 == 0) pulse1_lenCntr = 0;
             if(controlReg.enableLCpulse2 == 0) pulse2_lenCntr = 0;
             if(controlReg.enableLCtriangle == 0) triangle_lenCntr = 0;
             if(controlReg.enableLCnoise == 0) noise_lenCntr = 0;
-            //TODO: Set DMC disable/enable
+            if(controlReg.enableDMC == 0) dmcBytesRemaining = 0;
+            else if(dmcBytesRemaining == 0) {
+                dmcBytesRemaining = dmcTargetLen;
+                dmcCurrAddr = dmcTargetAddr;
+                loadDMC();
+            }
+            DMCinterruptRequest = false;
             break;
         case 0x4017:
             frameReg.value = val;
             if(frameReg.IRQinhibit) frameInterruptRequest = false;
             frameHalfCycle = 0;
             if(frameReg.frameMode) { //Clock immediately
-                //inc envelopes and trianble linear counter
+                clockEnvelopes();
+                clockLinearCounter();
                 clockLengthCounters();
+                clockSweep();
             }
             break;
     }
@@ -636,8 +664,54 @@ void stepNoise() {
 }
 
 void stepDMC() {
-    //TODO: Implement channel
-    outputDMC = 0;
+    if(timerDMC > 0) {
+        --timerDMC;
+    }
+    else {
+        timerDMC = dmcRateTable[dmcReg0.freqIdx];
+        if(dmcSilence == 0) {
+            if((dmcShiftRegister & 1) == 0) {
+                if(outputDMC >= 2) outputDMC -= 2;
+            }
+            else {
+                if(outputDMC <= 125) outputDMC += 2;
+            }
+        }
+        //Always shift register
+        dmcShiftRegister >>= 1;
+        --dmcBitsRemaining;
+    }
+    if(dmcBitsRemaining == 0) {
+        dmcBitsRemaining = 8;
+        if(dmcBuffer == 0) {
+            dmcSilence = true;
+        }
+        else {
+            dmcSilence = false;
+            dmcShiftRegister = dmcBuffer;
+            dmcBuffer = 0;
+            loadDMC();
+        }
+    }
+}
+
+void loadDMC() {
+    if(dmcBuffer != 0) return;
+    //TODO: stall CPU
+    dmcBuffer = CPU::memGet(dmcCurrAddr);
+    if(dmcCurrAddr == 0xFFFF) dmcCurrAddr = 0x8000;
+    else ++dmcCurrAddr;
+    --dmcBytesRemaining;
+
+    if(dmcBytesRemaining == 0) {
+        if(dmcReg0.loopSample) {
+            dmcCurrAddr = dmcTargetAddr;
+            dmcBytesRemaining = dmcTargetLen;
+        }
+        else if(dmcReg0.IRQenable) {
+            DMCinterruptRequest = true;
+        }
+    }
 }
 
 

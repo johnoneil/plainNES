@@ -23,6 +23,7 @@ void stepPulse2();
 void stepTriangle();
 void stepNoise();
 void stepDMC();
+void loadDMC();
 void mixOutput();
 void generateMixerTables();
 
