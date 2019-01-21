@@ -86,23 +86,22 @@ int main(int argc, char *argv[])
 				//std::cout << avgFPS << std::endl;
 				//cmdFPS = 1000000000.0f/(commandedFrameDuration_ns.count());
 			
-				if(avgFrameDuration_ns > (targetFrameDuration_ns)) {
-					commandedFrameDuration_ns -= durationAdj;
-				}
-				else if(avgFrameDuration_ns < (targetFrameDuration_ns)) {
-					commandedFrameDuration_ns += durationAdj;
-				}
+				//if(avgFrameDuration_ns > (targetFrameDuration_ns)) {
+				//	commandedFrameDuration_ns -= durationAdj;
+				//}
+				//else if(avgFrameDuration_ns < (targetFrameDuration_ns)) {
+				//	commandedFrameDuration_ns += durationAdj;
+				//}
 			}
 
 			GUI::update();
 			PPU::setframeReady(false);
 			while(PPU::isframeReady() == 0) {
 				CPU::step();
-				if(APU::audioBufferReady) GUI::updateAudio();
 			}
 			
 			frame_end = boost::chrono::high_resolution_clock::now();
-			boost::this_thread::sleep_until(frame_start + commandedFrameDuration_ns);
+			//boost::this_thread::sleep_until(frame_start + commandedFrameDuration_ns);
 		}
 	}
 	catch (std::exception& e)

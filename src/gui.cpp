@@ -7,13 +7,10 @@
 #include <SDL.h>
 #include <cstring>
 #include <array>
+#include <vector>
 #include <iostream>
 
 namespace GUI {
-
-#define SCREEN_SCALE 2
-const uint16_t samples = 4096;
-const uint16_t maxVolume = 1;
 
 SDL_Window *mainwindow;
 SDL_Window *PPUwindow;
@@ -27,8 +24,18 @@ std::array<std::array<SDL_Rect, 4>, 8> PaletteRect;
 SDL_Event event;
 const uint8_t *kbState = SDL_GetKeyboardState(NULL);
 
-std::array<uint32_t, 256 * 240> mainpixelMap;
+std::array<uint32_t, SCREEN_WIDTH * SCREEN_HEIGHT> mainpixelMap;
 std::array<uint32_t, 16*8 * 16*8> PTpixelMap;
+
+//Ratio between APU sample rate and emulator sample rate isn't a
+//whole number, so using a float accounts for rounding
+float rawSamplesPerSample = 1;
+
+int volatile audio_buffer_count, audio_rb_idx;
+int audio_wb_idx, audio_wb_pos;
+std::vector<std::array<int16_t, AUDIO_BUFFER_SIZE>> audio_buffers;
+SDL_sem * volatile audio_semaphore;
+
 bool quit = false;
 bool LctrlPressed = false;
 bool RctrlPressed = false;
@@ -64,18 +71,18 @@ int initMainWindow() {
     mainwindow = SDL_CreateWindow("plainNES",
                 SDL_WINDOWPOS_UNDEFINED,
                 SDL_WINDOWPOS_UNDEFINED,
-                256*SCREEN_SCALE,240*SCREEN_SCALE,
+                SCREEN_WIDTH*SCREEN_SCALE,SCREEN_HEIGHT*SCREEN_SCALE,
                 0);
     
     mainrenderer = SDL_CreateRenderer(mainwindow, -1, 0);
     SDL_RenderSetScale(mainrenderer, SCREEN_SCALE, SCREEN_SCALE);
-    maintexture = SDL_CreateTexture(mainrenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 256, 240);
+    maintexture = SDL_CreateTexture(mainrenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, SCREEN_WIDTH, SCREEN_HEIGHT);
 
-    for(int i=0; i<256*240; ++i) {
+    for(int i=0; i<SCREEN_WIDTH*SCREEN_HEIGHT; ++i) {
         mainpixelMap[i] = 0xFF000000;
     }
 
-    SDL_UpdateTexture(maintexture, NULL, mainpixelMap.data(), 256*4);
+    SDL_UpdateTexture(maintexture, NULL, mainpixelMap.data(), SCREEN_WIDTH*4);
     SDL_RenderCopy(mainrenderer, maintexture, NULL, NULL);
     SDL_RenderPresent(mainrenderer);
 
@@ -147,16 +154,33 @@ int initPPUWindow() {
 }
 
 int initAudio() {
-    SDL_AudioSpec audioSpec;
-    audioSpec.freq = APU::OUTPUT_AUDIO_FREQ;
-    audioSpec.format = AUDIO_U16;
-    audioSpec.channels = 1;
-    audioSpec.callback = NULL;
+    audio_rb_idx = 0;
+    audio_wb_idx = 0;
+    audio_wb_pos = 0;
 
-    int returnVal = SDL_OpenAudio(&audioSpec, NULL);
+    rawSamplesPerSample = (float)APU::APU_AUDIO_RATE/AUDIO_SAMPLE_RATE;
+
+    //Create audio buffer
+    int32_t sample_latency = WANTED_AUDIO_LATENCY_MS * AUDIO_SAMPLE_RATE * AUDIO_CHANNELS / 1000;
+    int buffer_count = sample_latency / AUDIO_BUFFER_SIZE;
+    if(buffer_count < 2)
+        buffer_count = 2;
+    audio_buffers.resize(buffer_count);
+
+    //Create SDL semaphore
+    audio_semaphore = SDL_CreateSemaphore(buffer_count-1);
+
+    SDL_AudioSpec wantedSpec;
+    wantedSpec.freq = AUDIO_SAMPLE_RATE;
+    wantedSpec.format = AUDIO_S16SYS;
+    wantedSpec.channels = AUDIO_CHANNELS;
+    wantedSpec.samples = AUDIO_BUFFER_SIZE;
+    wantedSpec.callback = fill_audio_buffer;
+
+    if(SDL_OpenAudio(&wantedSpec, 0) < 0)
+        return 1;
     SDL_PauseAudio(0);
-
-    return returnVal;
+    return 0;
 }
 
 void update()
@@ -253,13 +277,14 @@ void update()
 
     updateMainWindow();
     updatePPUWindow();
+    updateAudio();
 
 }
 
 void updateMainWindow() {
-    RENDER::convertNTSC2ARGB(mainpixelMap.data(), PPU::getPixelMap(), 256*240);
+    RENDER::convertNTSC2ARGB(mainpixelMap.data(), PPU::getPixelMap(), SCREEN_WIDTH*SCREEN_HEIGHT);
 
-    SDL_UpdateTexture(maintexture, NULL, mainpixelMap.data(), 256*4);
+    SDL_UpdateTexture(maintexture, NULL, mainpixelMap.data(), SCREEN_WIDTH*4);
     SDL_RenderCopy(mainrenderer, maintexture, NULL, NULL);
     SDL_RenderPresent(mainrenderer);
 }
@@ -294,8 +319,43 @@ void updatePPUWindow() {
 }
 
 void updateAudio() {
-    SDL_QueueAudio(1, APU::outputBufferPtr, APU::OUTPUT_AUDIO_BUFFER_SIZE*sizeof(uint16_t));
-    APU::audioBufferReady = false;
+    //Currently downsample using nearest neighbor method
+    //TODO: Look into using FIR filter or similar
+    float *input = APU::getRawAudioBuffer();
+    int size = APU::getRawAudioBufferSize();
+    std::cout << size;
+    int newbufferCnt = 0;
+    float currentRawBufferIdx = 0;
+    while(size > 0) {
+        ++newbufferCnt;
+        audio_buffers[audio_wb_idx][audio_wb_pos] = (int16_t)(input[(unsigned int)currentRawBufferIdx] * (1 << 14));
+        currentRawBufferIdx += rawSamplesPerSample;
+        size -= rawSamplesPerSample;
+        ++audio_wb_pos;
+
+        if(audio_wb_pos >= AUDIO_BUFFER_SIZE) {
+            //If current buffer full, move to next one
+            //If all buffers full, wait
+            audio_wb_pos = 0;
+            audio_wb_idx = (audio_wb_idx + 1) % audio_buffers.size();
+            SDL_SemWait(audio_semaphore);
+        }
+    }
+    std::cout << " -> " << newbufferCnt << std::endl;
+    APU::resetRawAudioBuffer();
+}
+
+void fill_audio_buffer(void *user_data, uint8_t *out, int byte_count) {
+    if(SDL_SemValue(audio_semaphore) < audio_buffers.size() - 1) {
+        //At least one full buffer
+        memcpy(out, audio_buffers[audio_rb_idx].data(), AUDIO_BUFFER_SIZE);
+        audio_rb_idx = (audio_rb_idx+1) % audio_buffers.size();
+        SDL_SemPost(audio_semaphore);
+    }
+    else {
+        //No buffers full. Just output silence
+        memset(out, 0, AUDIO_BUFFER_SIZE);
+    }
 }
 
 void close()

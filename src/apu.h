@@ -1,14 +1,11 @@
 #pragma once
 
 #include <stdint.h>
+#include <array>
 
 namespace APU {
 
-const int OUTPUT_AUDIO_FREQ = 48000;
-const int OUTPUT_AUDIO_BUFFER_SIZE = 1024;
-
-extern bool audioBufferReady;
-extern uint16_t* outputBufferPtr;
+const int APU_AUDIO_RATE = 1789773;
 
 void init();
 void step();
@@ -26,5 +23,8 @@ void stepDMC();
 void loadDMC();
 void mixOutput();
 void generateMixerTables();
+float *getRawAudioBuffer();
+int getRawAudioBufferSize();
+void resetRawAudioBuffer();
 
 }

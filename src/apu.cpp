@@ -3,6 +3,7 @@
 #include "utils.h"
 #include <array>
 #include <iostream>
+#include <boost/circular_buffer.hpp>
 
 namespace APU {
 
@@ -145,6 +146,16 @@ uint16_t timerPulse1;
 uint8_t outputPulse1;
 int dutyIdxPulse1;
 std::array<int,8> dutyCyclePulse1;
+std::array<std::array<int,8>,4> pulseDutyCycleTable = {
+    std::array<int,8> {0,1,0,0,0,0,0,0},
+    std::array<int,8> {0,1,1,0,0,0,0,0},
+    std::array<int,8> {0,1,1,1,1,0,0,0},
+    std::array<int,8> {1,0,0,1,1,1,1,1}
+};
+std::array<uint8_t,0x20> lengthCounterArray = {
+    10, 254, 20, 2, 40, 4, 80, 6, 160, 8, 60, 10, 14, 12, 26, 14,
+    12, 16, 24, 18, 48, 20, 96, 22, 192, 24, 72, 26, 16, 28, 32, 30
+};
 
 //Pulse 2
 uint8_t pulse2Volume = 0;
@@ -202,26 +213,16 @@ bool frameInterruptRequest = false;
 unsigned int frameHalfCycle;
 unsigned long long cycle = 0;
 
-bool audioBufferReady = false;
-int outputBufferIdx = 0;
-int outputBufferSel = 0;
-uint16_t* outputBufferPtr;
-std::array<std::array<uint16_t, OUTPUT_AUDIO_BUFFER_SIZE>,2> outputBuffers;
+//Raw Audio buffer
+//Size to roughly two frames of audio
+std::array<float, APU_AUDIO_RATE/60> rawAudioBuffer;
+int rawAudioBufferWriteIdx = 0;
 
-std::array<uint8_t,0x20> lengthCounterArray = {
-    10, 254, 20, 2, 40, 4, 80, 6, 160, 8, 60, 10, 14, 12, 26, 14,
-    12, 16, 24, 18, 48, 20, 96, 22, 192, 24, 72, 26, 16, 28, 32, 30
-};
+//Audio Mixer
+std::array<float, 31> pulseMixerTable;
+std::array<float, 203> tndMixerTable;
 
-std::array<uint16_t, 31> pulseMixerTable;
-std::array<uint16_t, 203> tndMixerTable;
 
-std::array<std::array<int,8>,4> pulseDutyCycleTable = {
-    std::array<int,8> {0,1,0,0,0,0,0,0},
-    std::array<int,8> {0,1,1,0,0,0,0,0},
-    std::array<int,8> {0,1,1,1,1,0,0,0},
-    std::array<int,8> {1,0,0,1,1,1,1,1}
-};
 
 
 void init()
@@ -292,17 +293,13 @@ void step()
     }
     stepTriangle();
 
-    if(cycle % (int)(1789772.7272 / OUTPUT_AUDIO_FREQ) == 0) { //Downsample
-        mixOutput();
-    }
+    /*outputPulse1 = 0;
+    outputPulse2 = 0;
+    outputNoise = 0;
+    outputTriangle = 0;
+    outputDMC = 0;*/
 
-    if(outputBufferIdx >= OUTPUT_AUDIO_BUFFER_SIZE) {
-        //Start filling other buffer and flag that a full buffer is ready to be outputted
-        outputBufferPtr = outputBuffers[outputBufferSel].data();
-        audioBufferReady = true;
-        outputBufferIdx = 0;
-        outputBufferSel = (outputBufferSel == 0) ? 1 : 0;
-    }
+    mixOutput();
 
     if(frameInterruptRequest)
         CPU::triggerIRQ();
@@ -679,7 +676,7 @@ void stepDMC() {
         }
         //Always shift register
         dmcShiftRegister >>= 1;
-        --dmcBitsRemaining;
+        if(dmcBitsRemaining > 0) --dmcBitsRemaining;
     }
     if(dmcBitsRemaining == 0) {
         dmcBitsRemaining = 8;
@@ -716,25 +713,37 @@ void loadDMC() {
 
 
 void mixOutput() {
-    uint16_t output;
+    //Output is 0-1
+    float output;
     output = pulseMixerTable[outputPulse1 + outputPulse2];
     output += tndMixerTable[3 * outputTriangle + 2 * outputNoise + outputDMC];
-    outputBuffers[outputBufferSel][outputBufferIdx] = output;
-    ++outputBufferIdx;
+    rawAudioBuffer[rawAudioBufferWriteIdx] = output;
+    rawAudioBufferWriteIdx = (rawAudioBufferWriteIdx+1) % rawAudioBuffer.size();
 }
 
 void generateMixerTables() {
     //Using info from http://wiki.nesdev.com/w/index.php/APU_Mixer
     //Generates lookup tables to speed up processing time
-    //Use 0-1000 instead of 0-1
     pulseMixerTable[0] = 0;
     tndMixerTable[0] = 0;
     for(unsigned int i=1; i<pulseMixerTable.size(); ++i) {
-        pulseMixerTable[i] = (95.52f / (8128.0f / i + 100.0f)) * 65535;
+        pulseMixerTable[i] = (95.52f / (8128.0f / i + 100.0f));
     }
     for(unsigned int i=1; i<tndMixerTable.size(); ++i) {
-        tndMixerTable[i] = (163.67f / (24329.0f / i + 100.0f)) * 65535;
+        tndMixerTable[i] = (163.67f / (24329.0f / i + 100.0f));
     }
+}
+
+float *getRawAudioBuffer() {
+    return rawAudioBuffer.data();
+}
+
+int getRawAudioBufferSize() {
+    return rawAudioBufferWriteIdx;
+}
+
+void resetRawAudioBuffer() {
+    rawAudioBufferWriteIdx = 0;
 }
 
 
