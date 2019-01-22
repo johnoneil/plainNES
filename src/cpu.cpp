@@ -1384,12 +1384,12 @@ void opADC(uint16_t addr) {
 	uint8_t M = memGet(addr);
 	if(enableLogging) opTxt += int_to_hex(M);
 	tick();
-	uint8_t oldA = A;
-	A += M + P.C;
-	P.C = (A <= oldA);
-	P.V = ((oldA^A)&(M^A)&0x80) != 0;
-	P.Z = (A == 0);
-	P.N = (A >> 7) == 1;
+	uint16_t sum = A + M + P.C;
+	P.C = (sum > 0xFF) ? 1 : 0;
+	P.V = (~(A^M) & (A^((uint8_t)sum)) & 0x80) ? 1 : 0;
+	A = (uint8_t)sum;
+	P.Z = (A == 0) ? 1 : 0;
+	P.N = ((A >> 7) > 0) ? 1 : 0;
 	pollInterrupts();
 }
 
@@ -2155,25 +2155,17 @@ void opSAX(uint16_t addr) {
 }
 
 void opSBC(uint16_t addr) {
+	//SBC works the same as ADC, with the value from memory bit flipped
 	uint8_t M = memGet(addr);
+	M = ~M;
 	if(enableLogging) opTxt += int_to_hex(M);
 	tick();
-	//Subtraction in binary works by flipping bits of value to subtract by and adding one
-	//Essentially this makes it the signed negative number of itself
-	//This value is than added in binary. Eg 3-2 -> 3+(-2)
-	//The adding one part is only done if the carry bit is set
-	//The rest acts just like ADC
-
-	M = ~M;
-	if(P.C)
-		M += 1;
-	uint8_t oldA = A;
-	A += M;
-
-	P.C = (A < oldA) || (M == 0);
-	P.V = ((oldA^A)&(M^A)&0x80) != 0;
-	P.Z = (A == 0);
-	P.N = (A >> 7) == 1;
+	uint16_t sum = A + M + P.C;
+	P.C = (sum > 0xFF) ? 1 : 0;
+	P.V = (~(A^M) & (A^((uint8_t)sum)) & 0x80) ? 1 : 0;
+	A = (uint8_t)sum;
+	P.Z = (A == 0) ? 1 : 0;
+	P.N = ((A >> 7) > 0) ? 1 : 0;
 	pollInterrupts();
 }
 
