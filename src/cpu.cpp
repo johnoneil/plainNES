@@ -1146,6 +1146,10 @@ void triggerIRQ() {
 	IRQ_request = true;
 }
 
+void unsetIRQ() {
+	IRQ_request = false;
+}
+
 void setPC(uint16_t newPC) {
 	PC = newPC;
 	PC_init = PC;
