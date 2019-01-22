@@ -59,29 +59,29 @@ int main(int argc, char *argv[])
 		CPU::setPC(debug_PC_start);
 	}
 
-	float targetFPS = 60;
+	//float targetFPS = 60;
 	//float avgFPS = targetFPS;
 	//float cmdFPS = targetFPS;
-	const int avgWindow = 10;
-	float FPSAdj = 0.1;
+	//const int avgWindow = 10;
+	//float FPSAdj = 0.1;
 	
-	boost::chrono::nanoseconds targetFrameDuration_ns((long long)(1000000000.0f / (targetFPS)));
-	boost::chrono::nanoseconds avgFrameDuration_ns = targetFrameDuration_ns;
-	boost::chrono::nanoseconds commandedFrameDuration_ns = targetFrameDuration_ns;
-	boost::chrono::nanoseconds durationAdj((long long)(1000000000.0f/targetFPS - (1000000000.0f/(targetFPS+FPSAdj))));
-	boost::chrono::high_resolution_clock::time_point frame_start, frame_end;
+	//boost::chrono::nanoseconds targetFrameDuration_ns((long long)(1000000000.0f / (targetFPS)));
+	//boost::chrono::nanoseconds avgFrameDuration_ns = targetFrameDuration_ns;
+	//boost::chrono::nanoseconds commandedFrameDuration_ns = targetFrameDuration_ns;
+	//boost::chrono::nanoseconds durationAdj((long long)(1000000000.0f/targetFPS - (1000000000.0f/(targetFPS+FPSAdj))));
+	//boost::chrono::high_resolution_clock::time_point frame_start, frame_end;
 	
-	int frames = 0;
-	boost::chrono::high_resolution_clock::time_point lastUpdate = boost::chrono::high_resolution_clock::now();
+	//int frames = 0;
+	//boost::chrono::high_resolution_clock::time_point lastUpdate = boost::chrono::high_resolution_clock::now();
 	try {
 		while(GUI::quit == 0 && CPU::alive)
 		{
-			frame_start = boost::chrono::high_resolution_clock::now();
-			++frames;
-			if(frames >= avgWindow) {
-				avgFrameDuration_ns = (boost::chrono::high_resolution_clock::now() - lastUpdate)/avgWindow;
-				lastUpdate = boost::chrono::high_resolution_clock::now();
-				frames = 0;
+			//frame_start = boost::chrono::high_resolution_clock::now();
+			//++frames;
+			//if(frames >= avgWindow) {
+			//	avgFrameDuration_ns = (boost::chrono::high_resolution_clock::now() - lastUpdate)/avgWindow;
+			//	lastUpdate = boost::chrono::high_resolution_clock::now();
+			//	frames = 0;
 				//avgFPS = 1000000000.0f/(avgFrameDuration_ns.count());
 				//std::cout << avgFPS << std::endl;
 				//cmdFPS = 1000000000.0f/(commandedFrameDuration_ns.count());
@@ -92,7 +92,7 @@ int main(int argc, char *argv[])
 				//else if(avgFrameDuration_ns < (targetFrameDuration_ns)) {
 				//	commandedFrameDuration_ns += durationAdj;
 				//}
-			}
+			//}
 
 			GUI::update();
 			PPU::setframeReady(false);
@@ -100,7 +100,7 @@ int main(int argc, char *argv[])
 				CPU::step();
 			}
 			
-			frame_end = boost::chrono::high_resolution_clock::now();
+			//frame_end = boost::chrono::high_resolution_clock::now();
 			//boost::this_thread::sleep_until(frame_start + commandedFrameDuration_ns);
 		}
 	}

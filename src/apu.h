@@ -7,6 +7,9 @@ namespace APU {
 
 const int APU_AUDIO_RATE = 1789773;
 
+extern std::array<float, APU_AUDIO_RATE/30> rawAudioBuffer;
+extern long rawAudioBufferWriteIdx;
+
 void init();
 void step();
 uint8_t regGet(uint16_t addr);

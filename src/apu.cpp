@@ -3,7 +3,6 @@
 #include "utils.h"
 #include <array>
 #include <iostream>
-#include <boost/circular_buffer.hpp>
 
 namespace APU {
 
@@ -215,8 +214,8 @@ unsigned long long cycle = 0;
 
 //Raw Audio buffer
 //Size to roughly two frames of audio
-std::array<float, APU_AUDIO_RATE/60> rawAudioBuffer;
-int rawAudioBufferWriteIdx = 0;
+std::array<float, APU_AUDIO_RATE/30> rawAudioBuffer;
+long rawAudioBufferWriteIdx = 0;
 
 //Audio Mixer
 std::array<float, 31> pulseMixerTable;
@@ -292,12 +291,6 @@ void step()
         stepDMC();
     }
     stepTriangle();
-
-    /*outputPulse1 = 0;
-    outputPulse2 = 0;
-    outputNoise = 0;
-    outputTriangle = 0;
-    outputDMC = 0;*/
 
     mixOutput();
 
@@ -732,18 +725,6 @@ void generateMixerTables() {
     for(unsigned int i=1; i<tndMixerTable.size(); ++i) {
         tndMixerTable[i] = (163.67f / (24329.0f / i + 100.0f));
     }
-}
-
-float *getRawAudioBuffer() {
-    return rawAudioBuffer.data();
-}
-
-int getRawAudioBufferSize() {
-    return rawAudioBufferWriteIdx;
-}
-
-void resetRawAudioBuffer() {
-    rawAudioBufferWriteIdx = 0;
 }
 
 

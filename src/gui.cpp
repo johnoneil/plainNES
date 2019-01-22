@@ -31,10 +31,12 @@ std::array<uint32_t, 16*8 * 16*8> PTpixelMap;
 //whole number, so using a float accounts for rounding
 float rawSamplesPerSample = 1;
 
+
 int volatile audio_buffer_count, audio_rb_idx;
 int audio_wb_idx, audio_wb_pos;
 std::vector<std::array<int16_t, AUDIO_BUFFER_SIZE>> audio_buffers;
 SDL_sem * volatile audio_semaphore;
+long rawAudioBufferReadIdx = 0;
 
 bool quit = false;
 bool LctrlPressed = false;
@@ -162,13 +164,13 @@ int initAudio() {
 
     //Create audio buffer
     int32_t sample_latency = WANTED_AUDIO_LATENCY_MS * AUDIO_SAMPLE_RATE * AUDIO_CHANNELS / 1000;
-    int buffer_count = sample_latency / AUDIO_BUFFER_SIZE;
-    if(buffer_count < 2)
-        buffer_count = 2;
-    audio_buffers.resize(buffer_count);
+    audio_buffer_count = sample_latency / AUDIO_BUFFER_SIZE;
+    if(audio_buffer_count < 2)
+        audio_buffer_count = 2;
+    audio_buffers.resize(audio_buffer_count);
 
     //Create SDL semaphore
-    audio_semaphore = SDL_CreateSemaphore(buffer_count-1);
+    audio_semaphore = SDL_CreateSemaphore(audio_buffer_count-1);
 
     SDL_AudioSpec wantedSpec;
     wantedSpec.freq = AUDIO_SAMPLE_RATE;
@@ -321,15 +323,16 @@ void updatePPUWindow() {
 void updateAudio() {
     //Currently downsample using nearest neighbor method
     //TODO: Look into using FIR filter or similar
-    float *input = APU::getRawAudioBuffer();
-    int size = APU::getRawAudioBufferSize();
-    std::cout << size;
-    int newbufferCnt = 0;
-    float currentRawBufferIdx = 0;
+    int size = APU::rawAudioBufferWriteIdx - rawAudioBufferReadIdx;
+    if(size < 0) size += APU::rawAudioBuffer.size();
+    //std::cout << size;
+    //int newbufferCnt = 0;
+    float currentRawBufferIdx = rawAudioBufferReadIdx;
     while(size > 0) {
-        ++newbufferCnt;
-        audio_buffers[audio_wb_idx][audio_wb_pos] = (int16_t)(input[(unsigned int)currentRawBufferIdx] * (1 << 14));
+        //++newbufferCnt;
+        audio_buffers[audio_wb_idx][audio_wb_pos] = (int16_t)(APU::rawAudioBuffer[(unsigned int)currentRawBufferIdx] * (1 << 14));
         currentRawBufferIdx += rawSamplesPerSample;
+        if(currentRawBufferIdx >= APU::rawAudioBuffer.size()) currentRawBufferIdx -= (float)APU::rawAudioBuffer.size();
         size -= rawSamplesPerSample;
         ++audio_wb_pos;
 
@@ -337,24 +340,26 @@ void updateAudio() {
             //If current buffer full, move to next one
             //If all buffers full, wait
             audio_wb_pos = 0;
-            audio_wb_idx = (audio_wb_idx + 1) % audio_buffers.size();
+            audio_wb_idx = (audio_wb_idx + 1) % audio_buffer_count;
             SDL_SemWait(audio_semaphore);
         }
     }
-    std::cout << " -> " << newbufferCnt << std::endl;
-    APU::resetRawAudioBuffer();
+    rawAudioBufferReadIdx = currentRawBufferIdx;
+    //std::cout << " -> " << newbufferCnt << std::endl;
 }
 
 void fill_audio_buffer(void *user_data, uint8_t *out, int byte_count) {
     if(SDL_SemValue(audio_semaphore) < audio_buffers.size() - 1) {
         //At least one full buffer
-        memcpy(out, audio_buffers[audio_rb_idx].data(), AUDIO_BUFFER_SIZE);
+        if(byte_count != AUDIO_BUFFER_SIZE*sizeof(int16_t))
+            std::cout << "Wrong buffer size: " << byte_count << " vs " << AUDIO_BUFFER_SIZE*sizeof(int16_t) << std::endl;
+        memcpy(out, audio_buffers[audio_rb_idx].data(), AUDIO_BUFFER_SIZE*sizeof(int16_t));
         audio_rb_idx = (audio_rb_idx+1) % audio_buffers.size();
         SDL_SemPost(audio_semaphore);
     }
     else {
         //No buffers full. Just output silence
-        memset(out, 0, AUDIO_BUFFER_SIZE);
+        memset(out, 0, byte_count);
     }
 }
 
