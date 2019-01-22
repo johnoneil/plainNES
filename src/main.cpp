@@ -59,47 +59,29 @@ int main(int argc, char *argv[])
 		CPU::setPC(debug_PC_start);
 	}
 
-	float targetFPS = 60;
-	//float avgFPS = targetFPS;
-	//float cmdFPS = targetFPS;
-	const int avgWindow = 10;
-	float FPSAdj = 0.1;
-	
-	boost::chrono::nanoseconds targetFrameDuration_ns((long long)(1000000000.0f / (targetFPS)));
-	boost::chrono::nanoseconds avgFrameDuration_ns = targetFrameDuration_ns;
-	boost::chrono::nanoseconds commandedFrameDuration_ns = targetFrameDuration_ns;
-	boost::chrono::nanoseconds durationAdj((long long)(1000000000.0f/targetFPS - (1000000000.0f/(targetFPS+FPSAdj))));
-	boost::chrono::high_resolution_clock::time_point frame_start, frame_end;
-	
-	int frames = 0;
-	boost::chrono::high_resolution_clock::time_point lastUpdate = boost::chrono::high_resolution_clock::now();
+	int framenum = 0;
+	const int avgWindow = 30;
+	boost::chrono::high_resolution_clock::time_point frameStart, frameEnd;
+	boost::chrono::nanoseconds avgFrameDuration_ns;
+
+	frameStart = boost::chrono::high_resolution_clock::now();
 	try {
 		while(GUI::quit == 0 && CPU::alive)
 		{
-			frame_start = boost::chrono::high_resolution_clock::now();
-			++frames;
-			if(frames >= avgWindow) {
-				avgFrameDuration_ns = (boost::chrono::high_resolution_clock::now() - lastUpdate)/avgWindow;
-				lastUpdate = boost::chrono::high_resolution_clock::now();
-				frames = 0;
-				//avgFPS = 1000000000.0f/(avgFrameDuration_ns.count());
-				//cmdFPS = 1000000000.0f/(commandedFrameDuration_ns.count());
-			
-				if(avgFrameDuration_ns > (targetFrameDuration_ns)) {
-					commandedFrameDuration_ns -= durationAdj;
-				}
-				else if(avgFrameDuration_ns < (targetFrameDuration_ns)) {
-					commandedFrameDuration_ns += durationAdj;
-				}
+			if(framenum >= avgWindow) {
+				frameEnd = boost::chrono::high_resolution_clock::now();
+				avgFrameDuration_ns = (frameEnd - frameStart)/avgWindow;
+				frameStart = frameEnd;
+				GUI::avgFPS = 1000000000.0f/(avgFrameDuration_ns.count());
+				framenum = 0;
 			}
+			++framenum;
 
 			GUI::update();
 			PPU::setframeReady(false);
-			while(PPU::isframeReady() == 0)
+			while(PPU::isframeReady() == 0) {
 				CPU::step();
-			
-			frame_end = boost::chrono::high_resolution_clock::now();
-			boost::this_thread::sleep_until(frame_start + commandedFrameDuration_ns);
+			}
 		}
 	}
 	catch (std::exception& e)

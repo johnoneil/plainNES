@@ -81,8 +81,8 @@ uint8_t OAMaddr;
 
 void init()
 {
-	scanline = 241; //To be consistant with nintendulator
-	dot = 0;
+	scanline = 0; //To be consistant with mesen
+	dot = 30;
 	frame = 0;
 	ppuClock = 0;
 	frameReady = false;
@@ -315,7 +315,12 @@ uint8_t getPalette(uint16_t addr)
 			addr = 0x0C;
 			break;
 	}
-	return paletteRAM[addr];
+	if(greyscale) {
+		return paletteRAM[addr] & 0x30;
+	}
+	else {
+		return paletteRAM[addr];
+	}
 }
 
 void setPalette(uint16_t addr, uint8_t val)
@@ -400,7 +405,13 @@ void renderFrameStep()
 
 void spriteEval()
 {
-	if(scanline == 261) return;
+	if(scanline == 261) {
+		//Clear latches (not sure what the real NES does)
+		for(int i=0; i<8; ++i) {
+			sprite_shiftL[i] = 0;
+			sprite_shiftH[i] = 0;
+		}
+	}
 	switch(dot) {
 		case 1:
 			//Clear sec OAM
@@ -414,10 +425,10 @@ void spriteEval()
 			spr0onNextLine = false;
 			for(n=0; n<64; ++n) {
 				if(oam_sec_idx >= 32) break;
-				unsigned int yCoord = oam_data[n*4];
-				unsigned int yMax = yCoord + 8;
+				oam_sec[oam_sec_idx] = oam_data[n*4]; //Y coord always copied
+				unsigned int yMax = oam_sec[oam_sec_idx] + 8;
 				if(spriteSize) yMax += 8;
-				if(scanline >= yCoord && scanline < yMax) {
+				if(scanline >= oam_sec[oam_sec_idx] && scanline < yMax) {
 					if(n == 0) spr0onNextLine = true;
 					for(m=0; m<4; ++m)
 						oam_sec[oam_sec_idx+m] = oam_data[n*4+m];
@@ -449,6 +460,13 @@ void spriteEval()
 				uint16_t addr = oam_sec[i*4 + 1];
 				spriteL[i] = oam_sec[i*4 + 2];
 				spriteCounter[i] = oam_sec[i*4 + 3];
+				
+				//Check if sprite out of range on y axis. If so, use transparent sprite
+				if(oam_sec[i*4] >= 239) { 
+					sprite_shiftL[i] = 0;
+					sprite_shiftH[i] = 0;
+					continue;
+				}
 				if(spriteSize == 0) { //8x8 bit sprite
 					//Check if flipped vertically
 					if((spriteL[i] & 0x80) > 0) yPos = 7 - yPos;
@@ -459,12 +477,19 @@ void spriteEval()
 				}
 				else { //8x16 bit sprite
 					if((spriteL[i] & 0x80) > 0) yPos = 15 - yPos;
-					if((addr & 1) == 0)
-						addr = (addr << 4) + yPos;
-					else
-						addr = ((addr & 0xFE) << 4) + 0x1000 + yPos;
+					if((addr & 1) == 0) {
+						addr <<= 3;
+					}
+					else {
+						addr = ((addr & 0xFE) << 3) + 0x1000;
+					}
+					if(yPos > 7) {
+						addr += 16;
+						yPos -= 8;
+					}
+					addr += yPos;
 					sprite_shiftL[i] = GAMEPAK::PPUmemGet(addr);
-					sprite_shiftH[i] = GAMEPAK::PPUmemGet(addr + 16);
+					sprite_shiftH[i] = GAMEPAK::PPUmemGet(addr + 8);
 				}
 			}
 			break;
@@ -480,10 +505,12 @@ void renderPixel()
 	if(scanline < 240 && dot > 0 && dot <= 256) {
 		if(rendering) {
 			if(showBG) {
-				BGpixelColor = (BGshiftL >> (15-fineXscroll)) & (1);
-				BGpixelColor |= (BGshiftH >> (14-fineXscroll)) & (2);
-				BGpixelColor |= (ATshiftL >> (13-fineXscroll)) & (4);
-				BGpixelColor |= (ATshiftH >> (12-fineXscroll)) & (8);
+				if(dot > 8 || showleftBG) {
+					BGpixelColor = (BGshiftL >> (15-fineXscroll)) & (1);
+					BGpixelColor |= (BGshiftH >> (14-fineXscroll)) & (2);
+					BGpixelColor |= (ATshiftL >> (13-fineXscroll)) & (4);
+					BGpixelColor |= (ATshiftH >> (12-fineXscroll)) & (8);
+				}
 			}
 			if(showSpr) {
 				usingSpr0 = false;
@@ -492,7 +519,7 @@ void renderPixel()
 						--spriteCounter[i];
 						continue;
 					}
-					if(SPRpixelColor == 0) { //Still looking for a sprite pixel
+					if(SPRpixelColor == 0 && (dot > 8 || showleftSpr)) { //Still looking for a sprite pixel
 						uint8_t currSprColor = 0;
 						if((spriteL[i] & 0x40) == 0) { //Not flipped horizontally
 							currSprColor = (sprite_shiftL[i] >> 7) | ((sprite_shiftH[i] >> 6) & 2);
@@ -534,8 +561,9 @@ void renderPixel()
 			else
 				pixelColor = BGpixelColor;
 
-			if(usingSpr0 && BGpixelColor != 0 && SPRpixelColor != 0)
+			if((spr0hit == false) && usingSpr0 && BGpixelColor != 0 && SPRpixelColor != 0 && dot < 256 && scanline <= 239) {
 				spr0hit = true;
+			}
 
 			if((pixelColor & 3) == 0) pixelColor = 0; //Set to universal background color
 
@@ -559,11 +587,6 @@ void renderPixel()
 void incrementHorz()
 {
 	//Will wrap around when hitting edge of nametable space
-	/*uint8_t coarseX = currVRAM_addr & 0x1F;
-	coarseX = (coarseX+1) & 0x1F;
-	currVRAM_addr = (currVRAM_addr & ~0x1F) | (coarseX);
-	if((coarseX) == 0)
-		currVRAM_addr ^= 0x0400;*/
 	++currVRAM_addr.coarseX;
 	if(currVRAM_addr.coarseX == 0)
 		currVRAM_addr.value ^= 0x0400; //Swap NT bit
@@ -574,7 +597,11 @@ void incrementVert()
 	++currVRAM_addr.fineY;
 	if(currVRAM_addr.fineY == 0) { //Overflows into coarseY
 		++currVRAM_addr.coarseY;
-		if(currVRAM_addr.coarseY == 0) {
+		if(currVRAM_addr.coarseY == 30) {
+			currVRAM_addr.coarseY = 0;
+			currVRAM_addr.value ^= 0x0800; //Swap NT bit
+		}
+		else if(currVRAM_addr.coarseY == 0) {
 			currVRAM_addr.value ^= 0x0800; //Swap NT bit
 		}
 	}

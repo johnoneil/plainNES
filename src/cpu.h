@@ -29,6 +29,7 @@ void OAMDMA_write();
 void pollInterrupts();
 void triggerNMI();
 void triggerIRQ();
+void unsetIRQ();
 void getStateString();
 void logStep();
 void closeLog();
