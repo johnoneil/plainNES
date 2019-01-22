@@ -61,7 +61,6 @@ int init()
         return 1;
     }
 
-    std::cout << "Init SDL TTF" << std::endl;
     if(TTF_Init() == -1) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "TTF_Init: %s\n", TTF_GetError());
         return 1;
@@ -369,7 +368,8 @@ void updateAudio() {
     float currentRawBufferIdx = rawAudioBufferReadIdx;
     while(size > 0) {
         //++newbufferCnt;
-        audio_buffers[audio_wb_idx][audio_wb_pos] = (int16_t)(APU::rawAudioBuffer[(unsigned int)currentRawBufferIdx] * (1 << 14));
+        //audio_buffers[audio_wb_idx][audio_wb_pos] = (int16_t)(APU::rawAudioBuffer[(unsigned int)currentRawBufferIdx] * (1 << 14));
+        audio_buffers[audio_wb_idx][audio_wb_pos] = (int16_t)((APU::rawAudioBuffer[(unsigned int)currentRawBufferIdx]*2.0f - 1.0f) * 0xFFF);
         currentRawBufferIdx += rawSamplesPerSample;
         if(currentRawBufferIdx >= APU::rawAudioBuffer.size()) currentRawBufferIdx -= (float)APU::rawAudioBuffer.size();
         size -= rawSamplesPerSample;

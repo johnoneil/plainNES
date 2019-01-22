@@ -96,6 +96,9 @@ void memSet(uint16_t addr, uint8_t val) {
 	else if(addr < 0x4016) {	//APU registers
 		APU::regSet(addr, val);
 	}
+	else if(addr == 0x4017) {
+		APU::regSet(addr, val);
+	}
 	else if(addr < 0x4018) {	//IO registers
 		IO::regSet(addr, val);
 	}
