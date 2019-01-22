@@ -5,6 +5,7 @@
 #include "cpu.h"
 #include "apu.h"
 #include <SDL.h>
+#include <SDL_ttf.h>
 #include <cstring>
 #include <array>
 #include <vector>
@@ -13,14 +14,23 @@
 namespace GUI {
 
 SDL_Window *mainwindow;
-SDL_Window *PPUwindow;
 SDL_Renderer *mainrenderer;
-SDL_Renderer *PPUrenderer;
 SDL_Texture *maintexture;
+SDL_Texture *FPStextTexture;
+SDL_Surface *FPStextSurface;
+SDL_Color FPStextColor = {0};
+TTF_Font *gFont = NULL;
+SDL_Rect textRect;
+char FPStext[20];
+float avgFPS = 0;
+
+SDL_Window *PPUwindow;
+SDL_Renderer *PPUrenderer;
 SDL_Texture *PTtexture0;
 SDL_Texture *PTtexture1;
 SDL_Rect rectPT0, rectPT1;
 std::array<std::array<SDL_Rect, 4>, 8> PaletteRect;
+
 SDL_Event event;
 const uint8_t *kbState = SDL_GetKeyboardState(NULL);
 
@@ -51,6 +61,12 @@ int init()
         return 1;
     }
 
+    std::cout << "Init SDL TTF" << std::endl;
+    if(TTF_Init() == -1) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "TTF_Init: %s\n", TTF_GetError());
+        return 1;
+    }
+
     if(initMainWindow()) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize Main Window: %s", SDL_GetError());
         return 1;
@@ -63,6 +79,13 @@ int init()
 
     if(initAudio()) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize Audio: %s", SDL_GetError());
+        return 1;
+    }
+
+    gFont = TTF_OpenFont( "Roboto-Regular.ttf", 12 );
+    if( gFont == NULL )
+    {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to load font! SDL_ttf Error: %s\n", TTF_GetError() );
         return 1;
     }
 
@@ -83,6 +106,10 @@ int initMainWindow() {
     for(int i=0; i<SCREEN_WIDTH*SCREEN_HEIGHT; ++i) {
         mainpixelMap[i] = 0xFF000000;
     }
+
+    FPStextColor.r = 255;
+    FPStextColor.g = 0;
+    FPStextColor.b = 0;
 
     SDL_UpdateTexture(maintexture, NULL, mainpixelMap.data(), SCREEN_WIDTH*4);
     SDL_RenderCopy(mainrenderer, maintexture, NULL, NULL);
@@ -288,6 +315,18 @@ void updateMainWindow() {
 
     SDL_UpdateTexture(maintexture, NULL, mainpixelMap.data(), SCREEN_WIDTH*4);
     SDL_RenderCopy(mainrenderer, maintexture, NULL, NULL);
+
+    //FPS text
+    //TODO: Make optional
+    snprintf(FPStext, sizeof(FPStext), "%.2f", avgFPS);
+    FPStextSurface = TTF_RenderText_Blended( gFont, FPStext, FPStextColor );
+    textRect.w = FPStextSurface->w;
+    textRect.h = FPStextSurface->h;
+    textRect.x = SCREEN_WIDTH-textRect.w;
+    textRect.y = 0;
+    FPStextTexture = SDL_CreateTextureFromSurface(mainrenderer, FPStextSurface);
+    SDL_RenderCopy(mainrenderer, FPStextTexture, NULL, &textRect);
+
     SDL_RenderPresent(mainrenderer);
 }
 

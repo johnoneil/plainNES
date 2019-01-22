@@ -13,6 +13,8 @@ const int AUDIO_BUFFER_SIZE = 1024;
 const int AUDIO_CHANNELS = 1;
 const int WANTED_AUDIO_LATENCY_MS = 200;
 
+extern float avgFPS;
+
 extern bool quit;
 
 int init();
