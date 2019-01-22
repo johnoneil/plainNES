@@ -17,18 +17,19 @@ bool NMI_request, IRQ_request, NMI_triggered, IRQ_triggered, interruptOccured;
 unsigned long long cycle;
 bool alive;
 
-union StatusReg {
-	uint8_t raw;
-	struct StatusBits {
-		bool C : 1; //Carry
-		bool Z : 1; //Zero
-		bool I : 1; //Interrupt Disable
-		bool D : 1; //Decimal Mode (not used on NES)
-		bool B : 2; //Break
-		bool V : 1; //Overflow
-		bool N : 1; //Negative
-	} b;
-} P;
+struct StatusReg {
+	union {
+		uint8_t value;
+		BitWorker<0, 1> C; //Carry
+		BitWorker<1, 1> Z; //Zero
+		BitWorker<2, 1> I; //Interrupt Disable
+		BitWorker<3, 1> D; //Decimal (not used on NES)
+		BitWorker<4, 2> B; //"Break" flags
+		BitWorker<6, 1> V; //Overflow
+		BitWorker<7, 1> N; //Negative
+	};
+}  P;
+
 std::array<uint8_t, 2048> RAM;
 uint8_t OAMDMA;
 uint8_t busVal;
@@ -117,7 +118,8 @@ void init(bool logging) {
 		logFile.open("log.txt",std::ios::trunc);
 	}
 	SP = 0xFD;
-	P.raw = 0x34;
+	P.value = 0;
+	P.I = 1;
 	PC = memGet(0xFFFC) | memGet(0xFFFD) << 8;
 	PC_init = PC;
 	NMI_request = NMI_triggered = false;
@@ -132,7 +134,7 @@ void init(bool logging) {
 void reset() {
 	//Per https://wiki.nesdev.com/w/index.php/CPU_power_up_state
 	SP -= 3;
-	P.b.I = true;
+	P.I = true;
 	memSet(0x4015, 0);
 	PPU::reset();
 	PC = memGet(0xFFFC) | memGet(0xFFFD) << 8;
@@ -1119,7 +1121,7 @@ void step() {
 void pollInterrupts() {
 	if(NMI_request)
 		NMI_triggered = true;
-	else if(IRQ_request && P.b.I == 0)
+	else if(IRQ_request && P.I == 0)
 		IRQ_triggered = true;
 }
 
@@ -1160,7 +1162,7 @@ void getStateString() {
 		<< "  A:" << std::setw(2) << static_cast<int>(A)
 		<< " X:" << std::setw(2) << static_cast<int>(X)
 		<< " Y:" << std::setw(2) << static_cast<int>(Y)
-		<< " P:" << std::setw(2) << static_cast<int>(P.raw)
+		<< " P:" << std::setw(2) << static_cast<int>(P.value)
 		<< " SP:" << std::setw(2) << static_cast<int>(SP)
 		<< " CYC:" << std::dec << std::setfill(' ') << std::setw(3) << PPU::dot
 		<< " SL:" << std::setw(3) << PPU::scanline;
@@ -1383,11 +1385,11 @@ void opADC(uint16_t addr) {
 	if(enableLogging) opTxt += int_to_hex(M);
 	tick();
 	uint8_t oldA = A;
-	A += M + P.b.C;
-	P.b.C = (A <= oldA);
-	P.b.V = ((oldA^A)&(M^A)&0x80) != 0;
-	P.b.Z = (A == 0);
-	P.b.N = (A >> 7) == 1;
+	A += M + P.C;
+	P.C = (A <= oldA);
+	P.V = ((oldA^A)&(M^A)&0x80) != 0;
+	P.Z = (A == 0);
+	P.N = (A >> 7) == 1;
 	pollInterrupts();
 }
 
@@ -1403,11 +1405,11 @@ void opALR(uint16_t addr) {
 	pollInterrupts();
 	tick();
 	A &= M;
-	P.b.C = M & 1;
+	P.C = M & 1;
 	M = M >> 1;
 	memSet(addr, M);
-	P.b.Z = (M == 0);
-	P.b.N = (M >> 7) > 0;
+	P.Z = (M == 0);
+	P.N = (M >> 7) > 0;
 }
 
 void opANC(uint16_t addr) {
@@ -1415,9 +1417,9 @@ void opANC(uint16_t addr) {
 	pollInterrupts();
 	tick();
 	A &= M;
-	P.b.Z = (A == 0);
-	P.b.N = (A >> 7) > 0;
-	P.b.C = P.b.N;
+	P.Z = (A == 0);
+	P.N = (A >> 7) > 0;
+	P.C = P.N;
 }
 
 void opAND(uint16_t addr) {
@@ -1426,8 +1428,8 @@ void opAND(uint16_t addr) {
 	pollInterrupts();
 	tick();
 	A &= M;
-	P.b.Z = (A == 0);
-	P.b.N = (A >> 7) > 0;
+	P.Z = (A == 0);
+	P.N = (A >> 7) > 0;
 }
 
 void opARR(uint16_t addr) {
@@ -1435,20 +1437,20 @@ void opARR(uint16_t addr) {
 	pollInterrupts();
 	tick();
 	A &= M;
-	uint8_t C0 = P.b.C;
-	P.b.C = (M & 1);
+	uint8_t C0 = P.C;
+	P.C = (M & 1);
 	M = M >> 1;
 	M |= (C0 << 7);
 	memSet(addr, M);
-	P.b.Z = (M == 0);
-	P.b.N = (A >> 7) > 0;
+	P.Z = (M == 0);
+	P.N = (A >> 7) > 0;
 }
 
 void opASL() {
-	P.b.C = (A >> 7) > 0;
+	P.C = (A >> 7) > 0;
 	A = A << 1;
-	P.b.Z = (A == 0);
-	P.b.N = (A >> 7) > 0;
+	P.Z = (A == 0);
+	P.N = (A >> 7) > 0;
 	pollInterrupts();
 	tick();
 }
@@ -1459,10 +1461,10 @@ void opASL(uint16_t addr) {
 	tick();
 	memSet(addr, M); //Dummy write
 	tick();
-	P.b.C = (M >> 7) > 0;
+	P.C = (M >> 7) > 0;
 	M = M << 1;
-	P.b.Z = (A == 0);
-	P.b.N = (M >> 7) > 0;
+	P.Z = (A == 0);
+	P.N = (M >> 7) > 0;
 	memSet(addr, M);
 	tick();
 	pollInterrupts();
@@ -1480,7 +1482,7 @@ void opBCC() {
 	memCnt = 2;
 	++PC;
 	tick();
-	if(P.b.C == 0) {
+	if(P.C == 0) {
 		uint16_t oldPC = PC;
 		PC += delta;
 		if((oldPC & 0xFF00) != (PC & 0xFF00))
@@ -1496,7 +1498,7 @@ void opBCS() {
 	memCnt = 2;
 	++PC;
 	tick();
-	if(P.b.C) {
+	if(P.C) {
 		uint16_t oldPC = PC;
 		PC += delta;
 		if((oldPC & 0xFF00) != (PC & 0xFF00))
@@ -1512,7 +1514,7 @@ void opBEQ() {
 	memCnt = 2;
 	++PC;
 	tick();
-	if(P.b.Z) {
+	if(P.Z) {
 		uint16_t oldPC = PC;
 		PC += delta;
 		if((oldPC & 0xFF00) != (PC & 0xFF00))
@@ -1527,9 +1529,9 @@ void opBIT(uint16_t addr) {
 	pollInterrupts();
 	uint8_t M = memGet(addr);
 	if(enableLogging) opTxt += int_to_hex(M);
-	P.b.Z = (A & M) == 0;
-	P.b.N = (M & 1<<7) != 0;
-	P.b.V = (M & 1<<6) != 0;
+	P.Z = (A & M) == 0;
+	P.N = (M & 1<<7) != 0;
+	P.V = (M & 1<<6) != 0;
 }
 
 void opBMI() {
@@ -1538,7 +1540,7 @@ void opBMI() {
 	memCnt = 2;
 	++PC;
 	tick();
-	if(P.b.N) {
+	if(P.N) {
 		uint16_t oldPC = PC;
 		PC += delta;
 		if((oldPC & 0xFF00) != (PC & 0xFF00))
@@ -1554,7 +1556,7 @@ void opBNE() {
 	memCnt = 2;
 	++PC;
 	tick();
-	if(P.b.Z == 0) {
+	if(P.Z == 0) {
 		uint16_t oldPC = PC;
 		PC += delta;
 		if((oldPC & 0xFF00) != (PC & 0xFF00))
@@ -1570,7 +1572,7 @@ void opBPL() {
 	memCnt = 2;
 	++PC;
 	tick();
-	if(P.b.N == 0) {
+	if(P.N == 0) {
 		uint16_t oldPC = PC;
 		PC += delta;
 		if((oldPC & 0xFF00) != (PC & 0xFF00))
@@ -1582,7 +1584,6 @@ void opBPL() {
 
 void opBRK() {
 	uint16_t newaddr;
-	uint8_t bFlag;
 
 	memSet(((uint16_t)0x01 << 8) | SP, PC >> 8);
 	--SP;
@@ -1590,26 +1591,31 @@ void opBRK() {
 	memSet(((uint16_t)0x01 << 8) | SP, PC);
 	--SP;
 	tick();
+
+	//Copy P since the B flag is only passed onto stack
+	int8_t oldP = P.value;
+
 	//Will catch interrupts here
 	if(NMI_triggered || NMI_request) {
 		newaddr = 0xFFFA;
-		bFlag = 0x20;
+		P.B = 2;
 		NMI_request = NMI_triggered = false;
 		if(enableLogging) logFile << "NMI Interrupt\n";
 	}
 	else if(IRQ_triggered || IRQ_request) {
 		newaddr = 0xFFFE;
-		bFlag = 0x20;
+		P.B = 2;
 		IRQ_triggered = false;
 		if(enableLogging) logFile << "IRQ Interrupt\n";
 	}
 	else {
 		newaddr = 0xFFFE;
-		bFlag = 0x30;
+		P.B = 3;
 		++PC;
 	}
-	memSet(((uint16_t)0x01 << 8) | SP, P.raw | bFlag);
-	P.b.I = 1;
+	memSet(((uint16_t)0x01 << 8) | SP, P.value);
+	P.value = oldP;
+	P.I = 1;
 	--SP;
 	tick();
 	uint16_t addr = memGet(newaddr);
@@ -1627,7 +1633,7 @@ void opBVC()  {
 	memCnt = 2;
 	++PC;
 	tick();
-	if(P.b.V == 0) {
+	if(P.V == 0) {
 		uint16_t oldPC = PC;
 		PC += delta;
 		if((oldPC & 0xFF00) != (PC & 0xFF00))
@@ -1643,7 +1649,7 @@ void opBVS() {
 	memCnt = 2;
 	++PC;
 	tick();
-	if(P.b.V) {
+	if(P.V) {
 		uint16_t oldPC = PC;
 		PC += delta;
 		if((oldPC & 0xFF00) != (PC & 0xFF00))
@@ -1655,33 +1661,33 @@ void opBVS() {
 
 void opCLC() {
 	pollInterrupts();
-	P.b.C = 0;
+	P.C = 0;
 	tick();
 }
 
 void opCLD() {
 	pollInterrupts();
-	P.b.D = 0;
+	P.D = 0;
 	tick();
 }
 
 void opCLI() {
 	pollInterrupts();
-	P.b.I = 0;
+	P.I = 0;
 	tick();
 }
 
 void opCLV() {
 	pollInterrupts();
-	P.b.V = 0;
+	P.V = 0;
 	tick();
 }
 
 void opCMP(uint8_t M) {
 	pollInterrupts();
-	P.b.C = (A >= M);
-	P.b.Z = (A == M);
-	P.b.N = ((uint8_t)(A-M)>>7) == 1;
+	P.C = (A >= M);
+	P.Z = (A == M);
+	P.N = ((uint8_t)(A-M)>>7) == 1;
 	tick();
 }
 
@@ -1690,18 +1696,18 @@ void opCMP(uint16_t addr) {
 	uint8_t M = memGet(addr);
 	if(enableLogging) opTxt += int_to_hex(M);
 	tick();
-	P.b.C = (A >= M);
-	P.b.Z = (A == M);
-	P.b.N = ((uint8_t)(A-M)>>7) == 1;
+	P.C = (A >= M);
+	P.Z = (A == M);
+	P.N = ((uint8_t)(A-M)>>7) == 1;
 	//tick();
 }
 
 void opCPX(uint8_t M) {
 	pollInterrupts();
 	if(enableLogging) opTxt += int_to_hex(M);
-	P.b.C = (X >= M);
-	P.b.Z = (X == M);
-	P.b.N = ((uint8_t)(X-M)>>7) == 1;
+	P.C = (X >= M);
+	P.Z = (X == M);
+	P.N = ((uint8_t)(X-M)>>7) == 1;
 	tick();
 }
 
@@ -1710,17 +1716,17 @@ void opCPX(uint16_t addr) {
 	uint8_t M = memGet(addr);
 	if(enableLogging) opTxt += int_to_hex(M);
 	tick();
-	P.b.C = (X >= M);
-	P.b.Z = (X == M);
-	P.b.N = ((uint8_t)(X-M)>>7) == 1;
+	P.C = (X >= M);
+	P.Z = (X == M);
+	P.N = ((uint8_t)(X-M)>>7) == 1;
 }
 
 void opCPY(uint8_t M) {
 	pollInterrupts();
 	if(enableLogging) opTxt += int_to_hex(M);
-	P.b.C = (Y >= M);
-	P.b.Z = (Y == M);
-	P.b.N = ((uint8_t)(Y-M)>>7) == 1;
+	P.C = (Y >= M);
+	P.Z = (Y == M);
+	P.N = ((uint8_t)(Y-M)>>7) == 1;
 	tick();
 }
 
@@ -1729,9 +1735,9 @@ void opCPY(uint16_t addr) {
 	uint8_t M = memGet(addr);
 	if(enableLogging) opTxt += int_to_hex(M);
 	tick();
-	P.b.C = (Y >= M);
-	P.b.Z = (Y == M);
-	P.b.N = ((uint8_t)(Y-M)>>7) == 1;
+	P.C = (Y >= M);
+	P.Z = (Y == M);
+	P.N = ((uint8_t)(Y-M)>>7) == 1;
 }
 
 void opDCP(uint16_t addr) {
@@ -1739,9 +1745,9 @@ void opDCP(uint16_t addr) {
 	tick();
 	memSet(addr, M);
 	M -= 1;
-	P.b.C = (A >= M);
-	P.b.Z = (A == M);
-	P.b.N = ((uint8_t)(A-M)>>7) == 1;
+	P.C = (A >= M);
+	P.Z = (A == M);
+	P.N = ((uint8_t)(A-M)>>7) == 1;
 	tick();
 	memSet(addr, M);
 	tick();
@@ -1754,8 +1760,8 @@ void opDEC(uint16_t addr) {
 	tick();
 	memSet(addr, M);
 	M -= 1;
-	P.b.Z = (M == 0);
-	P.b.N = (M >> 7) > 0;
+	P.Z = (M == 0);
+	P.N = (M >> 7) > 0;
 	tick();
 	memSet(addr, M);
 	tick();
@@ -1765,16 +1771,16 @@ void opDEC(uint16_t addr) {
 void opDEX() {
 	pollInterrupts();
 	X -= 1;
-	P.b.Z = (X == 0);
-	P.b.N = (X >> 7) > 0;
+	P.Z = (X == 0);
+	P.N = (X >> 7) > 0;
 	tick();
 }
 
 void opDEY() {
 	pollInterrupts();
 	Y -= 1;
-	P.b.Z = (Y == 0);
-	P.b.N = (Y >> 7) > 0;
+	P.Z = (Y == 0);
+	P.N = (Y >> 7) > 0;
 	tick();
 }
 
@@ -1783,8 +1789,8 @@ void opEOR(void) {
 	uint8_t M = memGet(PC);
 	if(enableLogging) opTxt += int_to_hex(M);
 	A ^= M;
-	P.b.Z = (A == 0);
-	P.b.N = (A >> 7) > 0;
+	P.Z = (A == 0);
+	P.N = (A >> 7) > 0;
 	tick();
 }
 
@@ -1793,8 +1799,8 @@ void opEOR(uint16_t addr) {
 	uint8_t M = memGet(addr);
 	if(enableLogging) opTxt += int_to_hex(M);
 	A ^= M;
-	P.b.Z = (A == 0);
-	P.b.N = (A >> 7) > 0;
+	P.Z = (A == 0);
+	P.N = (A >> 7) > 0;
 	tick();
 }
 
@@ -1804,8 +1810,8 @@ void opINC(uint16_t addr) {
 	tick();
 	memSet(addr, M);
 	M += 1;
-	P.b.Z = (M == 0);
-	P.b.N = (M >> 7) > 0;
+	P.Z = (M == 0);
+	P.N = (M >> 7) > 0;
 	tick();
 	memSet(addr, M);
 	tick();
@@ -1816,16 +1822,16 @@ void opINX() {
 	pollInterrupts();
 	X += 1;
 	tick();
-	P.b.Z = (X == 0);
-	P.b.N = (X >> 7) > 0;
+	P.Z = (X == 0);
+	P.N = (X >> 7) > 0;
 }
 
 void opINY() {
 	pollInterrupts();
 	Y += 1;
 	tick();
-	P.b.Z = (Y == 0);
-	P.b.N = (Y >> 7) > 0;
+	P.Z = (Y == 0);
+	P.N = (Y >> 7) > 0;
 }
 
 void opISC(uint16_t addr) {
@@ -1837,15 +1843,15 @@ void opISC(uint16_t addr) {
 	memSet(addr, M);
 	tick();
 	M = ~M;
-	if(P.b.C)
+	if(P.C)
 		M += 1;
 	uint8_t oldA = A;
 	A += M;
 
-	P.b.C = (A <= oldA);
-	P.b.V = ((oldA^A)&(M^A)&0x80) != 0;
-	P.b.Z = (A == 0);
-	P.b.N = (A >> 7) == 1;
+	P.C = (A <= oldA);
+	P.V = ((oldA^A)&(M^A)&0x80) != 0;
+	P.Z = (A == 0);
+	P.N = (A >> 7) == 1;
 	pollInterrupts();
 }
 
@@ -1872,8 +1878,8 @@ void opLAS(uint16_t addr) {
 	A = val;
 	SP = val;
 	X = val;
-	P.b.Z = (val == 0);
-	P.b.N = ((val & 0x80) > 0);
+	P.Z = (val == 0);
+	P.N = ((val & 0x80) > 0);
 	tick();
 	pollInterrupts();
 }
@@ -1882,8 +1888,8 @@ void opLAX(uint16_t addr) {
 	A = memGet(addr);
 	tick();
 	X = memGet(addr);
-	P.b.Z = (X == 0);
-	P.b.N = (X >> 7) > 0;
+	P.Z = (X == 0);
+	P.N = (X >> 7) > 0;
 	pollInterrupts();
 }
 
@@ -1892,16 +1898,16 @@ void opLDA() {
 	A = memGet(PC);
 	++PC;
 	tick();
-	P.b.Z = (A == 0);
-	P.b.N = (A >> 7) > 0;
+	P.Z = (A == 0);
+	P.N = (A >> 7) > 0;
 }
 
 void opLDA(uint16_t addr) {
 	A = memGet(addr);
 	if(enableLogging) opTxt += " = " + int_to_hex(A);
 	tick();
-	P.b.Z = (A == 0);
-	P.b.N = (A >> 7) > 0;
+	P.Z = (A == 0);
+	P.N = (A >> 7) > 0;
 	pollInterrupts();
 }
 
@@ -1910,15 +1916,15 @@ void opLDX() {
 	X = memGet(PC);
 	++PC;
 	tick();
-	P.b.Z = (X == 0);
-	P.b.N = (X >> 7) > 0;
+	P.Z = (X == 0);
+	P.N = (X >> 7) > 0;
 }
 
 void opLDX(uint16_t addr) {
 	X = memGet(addr);
 	tick();
-	P.b.Z = (X == 0);
-	P.b.N = (X >> 7) > 0;
+	P.Z = (X == 0);
+	P.N = (X >> 7) > 0;
 	pollInterrupts();
 }
 
@@ -1927,24 +1933,24 @@ void opLDY() {
 	Y = memGet(PC);
 	++PC;
 	tick();
-	P.b.Z = (Y == 0);
-	P.b.N = (Y >> 7) > 0;
+	P.Z = (Y == 0);
+	P.N = (Y >> 7) > 0;
 }
 
 void opLDY(uint16_t addr) {
 	Y = memGet(addr);
 	tick();
-	P.b.Z = (Y == 0);
-	P.b.N = (Y >> 7) > 0;
+	P.Z = (Y == 0);
+	P.N = (Y >> 7) > 0;
 	pollInterrupts();
 }
 
 void opLSR() {
 	pollInterrupts();
-	P.b.C = A & 1;
+	P.C = A & 1;
 	A = A >> 1;
-	P.b.Z = (A == 0);
-	P.b.N = (A >> 7) > 0;
+	P.Z = (A == 0);
+	P.N = (A >> 7) > 0;
 	tick();
 }
 
@@ -1953,11 +1959,11 @@ void opLSR(uint16_t addr) {
 	tick();
 	memSet(addr, M); //Dummy write
 	tick();
-	P.b.C = M & 1;
+	P.C = M & 1;
 	M = M >> 1;
 	memSet(addr, M);
-	P.b.Z = (M == 0);
-	P.b.N = (M >> 7) > 0;
+	P.Z = (M == 0);
+	P.N = (M >> 7) > 0;
 	tick();
 	pollInterrupts();
 }
@@ -1973,8 +1979,8 @@ void opORA(uint16_t addr) {
 	if(enableLogging) opTxt += int_to_hex(M);
 	tick();
 	A |= M;
-	P.b.Z = (A == 0);
-	P.b.N = (A >> 7) > 0;
+	P.Z = (A == 0);
+	P.N = (A >> 7) > 0;
 	pollInterrupts();
 }
 
@@ -1988,7 +1994,10 @@ void opPHA() {
 
 void opPHP() {
 	pollInterrupts();
-	memSet(((uint16_t)0x01 << 8) | SP, P.raw);
+	int8_t Pold = P.value;
+	P.B = 3;
+	memSet(((uint16_t)0x01 << 8) | SP, P.value);
+	P.value = Pold;
 	--SP;
 	tick();
 	tick();
@@ -1999,8 +2008,8 @@ void opPLA() {
 	tick();
 	A = memGet(((uint16_t)0x01 << 8) | SP);
 	tick();
-	P.b.Z = (A == 0);
-	P.b.N = (A >> 7) > 0;
+	P.Z = (A == 0);
+	P.N = (A >> 7) > 0;
 	tick();
 	pollInterrupts();
 }
@@ -2009,7 +2018,8 @@ void opPLP() {
 	pollInterrupts();
 	++SP;
 	tick();
-	P.raw = memGet(((uint16_t)0x01 << 8) | SP);
+	P.value = memGet(((uint16_t)0x01 << 8) | SP);
+	P.B = 0;
 	tick();
 	tick();
 }
@@ -2018,27 +2028,27 @@ void opRLA(uint16_t addr) {
 	uint8_t M = memGet(addr);
 	tick();
 	memSet(addr, M);
-	uint8_t C0 = P.b.C;
-	P.b.C = (M >> 7) > 0;
+	uint8_t C0 = P.C;
+	P.C = (M >> 7) > 0;
 	M = M << 1;
 	M |= C0;
 	tick();
 	memSet(addr, M);
 	tick();
 	A &= M;
-	P.b.Z = (A == 0);
-	P.b.N = (A >> 7) > 0;
+	P.Z = (A == 0);
+	P.N = (A >> 7) > 0;
 	pollInterrupts();
 }
 
 void opROL() {
 	pollInterrupts();
-	uint8_t C0 = P.b.C;
-	P.b.C = (A >> 7) > 0;
+	uint8_t C0 = P.C;
+	P.C = (A >> 7) > 0;
 	A = A << 1;
 	A |= C0;
-	P.b.Z = (A == 0);
-	P.b.N = (A >> 7) > 0;
+	P.Z = (A == 0);
+	P.N = (A >> 7) > 0;
 	tick();
 }
 
@@ -2048,25 +2058,25 @@ void opROL(uint16_t addr) {
 	tick();
 	memSet(addr, M); //Dummy write
 	tick();
-	uint8_t C0 = P.b.C;
-	P.b.C = (M >> 7) > 0;
+	uint8_t C0 = P.C;
+	P.C = (M >> 7) > 0;
 	M = M << 1;
 	M |= C0;
 	memSet(addr, M);
-	P.b.Z = (M == 0);
-	P.b.N = (A >> 7) > 0;
+	P.Z = (M == 0);
+	P.N = (A >> 7) > 0;
 	tick();
 	pollInterrupts();
 }
 
 void opROR() {
 	pollInterrupts();
-	bool C0 = P.b.C;
-	P.b.C = (A & 1);
+	bool C0 = P.C;
+	P.C = (A & 1);
 	A = A >> 1;
 	A |= C0 ? (1 << 7) : 0;
-	P.b.Z = (A == 0);
-	P.b.N = C0;
+	P.Z = (A == 0);
+	P.N = C0;
 	tick();
 }
 
@@ -2076,13 +2086,13 @@ void opROR(uint16_t addr) {
 	tick();
 	memSet(addr, M); //Dummy write
 	tick();
-	bool C0 = P.b.C;
-	P.b.C = (M & 1);
+	bool C0 = P.C;
+	P.C = (M & 1);
 	M = M >> 1;
 	M |= C0 ? (1 << 7) : 0;
 	memSet(addr, M);
-	P.b.Z = (M == 0);
-	P.b.N = C0;
+	P.Z = (M == 0);
+	P.N = C0;
 	tick();
 	pollInterrupts();
 }
@@ -2092,24 +2102,25 @@ void opRRA(uint16_t addr) {
 	tick();
 	memSet(addr, M); //Dummy write
 	tick();
-	uint8_t C0 = P.b.C;
-	P.b.C = (M & 1);
+	uint8_t C0 = P.C;
+	P.C = (M & 1);
 	M = M >> 1;
 	M |= (C0 << 7);
 	memSet(addr, M);
 	tick();
 	uint8_t oldA = A;
-	A += M + P.b.C;
-	P.b.C = (A < oldA);
-	P.b.V = ((oldA^A)&(M^A)&0x80) != 0;
-	P.b.Z = (A == 0);
-	P.b.N = (A >> 7) == 1;
+	A += M + P.C;
+	P.C = (A < oldA);
+	P.V = ((oldA^A)&(M^A)&0x80) != 0;
+	P.Z = (A == 0);
+	P.N = (A >> 7) == 1;
 	pollInterrupts();
 }
 
 void opRTI() {
 	++SP;
-	P.raw = memGet(((uint16_t)0x01 << 8) | SP);
+	P.value = memGet(((uint16_t)0x01 << 8) | SP);
+	P.B = 0;
 	tick();
 	++SP;
 	uint16_t addr = memGet(((uint16_t)0x01 << 8) | SP);
@@ -2154,33 +2165,33 @@ void opSBC(uint16_t addr) {
 	//The rest acts just like ADC
 
 	M = ~M;
-	if(P.b.C)
+	if(P.C)
 		M += 1;
 	uint8_t oldA = A;
 	A += M;
 
-	P.b.C = (A < oldA) || (M == 0);
-	P.b.V = ((oldA^A)&(M^A)&0x80) != 0;
-	P.b.Z = (A == 0);
-	P.b.N = (A >> 7) == 1;
+	P.C = (A < oldA) || (M == 0);
+	P.V = ((oldA^A)&(M^A)&0x80) != 0;
+	P.Z = (A == 0);
+	P.N = (A >> 7) == 1;
 	pollInterrupts();
 }
 
 void opSEC() {
 	pollInterrupts();
-	P.b.C = 1;
+	P.C = 1;
 	tick();
 }
 
 void opSED() {
 	pollInterrupts();
-	P.b.D = 1;
+	P.D = 1;
 	tick();
 }
 
 void opSEI() {
 	pollInterrupts();
-	P.b.I = 1;
+	P.I = 1;
 	tick();
 }
 
@@ -2202,14 +2213,14 @@ void opSLO(uint16_t addr) {
 	uint8_t M = memGet(addr);
 	tick();
 	memSet(addr, M);
-	P.b.C = (M >> 7) > 0;
+	P.C = (M >> 7) > 0;
 	M = M << 1;
 	tick();
 	memSet(addr, M);
 	tick();
 	A |= M;
-	P.b.Z = (A == 0);
-	P.b.N = (A >> 7) > 0;
+	P.Z = (A == 0);
+	P.N = (A >> 7) > 0;
 	pollInterrupts();
 }
 
@@ -2217,14 +2228,14 @@ void opSRE(uint16_t addr) {
 	uint8_t M = memGet(addr);
 	tick();
 	memSet(addr, M);
-	P.b.C = M & 1;
+	P.C = M & 1;
 	M = M >> 1;
 	tick();
 	memSet(addr, M);
 	tick();
 	A ^= M;
-	P.b.Z = (A == 0);
-	P.b.N = (A >> 7) > 0;
+	P.Z = (A == 0);
+	P.N = (A >> 7) > 0;
 	pollInterrupts();
 }
 
@@ -2257,32 +2268,32 @@ void opTAS(uint16_t addr) {
 void opTAX() {
 	pollInterrupts();
 	X = A;
-	P.b.Z = (X == 0);
-	P.b.N = (X >> 7) > 0;
+	P.Z = (X == 0);
+	P.N = (X >> 7) > 0;
 	tick();
 }
 
 void opTAY() {
 	pollInterrupts();
 	Y = A;
-	P.b.Z = (Y == 0);
-	P.b.N = (Y >> 7) > 0;
+	P.Z = (Y == 0);
+	P.N = (Y >> 7) > 0;
 	tick();
 }
 
 void opTSX() {
 	pollInterrupts();
 	X = SP;
-	P.b.Z = (X == 0);
-	P.b.N = (X >> 7) > 0;
+	P.Z = (X == 0);
+	P.N = (X >> 7) > 0;
 	tick();
 }
 
 void opTXA() {
 	pollInterrupts();
 	A = X;
-	P.b.Z = (A == 0);
-	P.b.N = (A >> 7) > 0;
+	P.Z = (A == 0);
+	P.N = (A >> 7) > 0;
 	tick();
 }
 
@@ -2295,8 +2306,8 @@ void opTXS() {
 void opTYA() {
 	pollInterrupts();
 	A = Y;
-	P.b.Z = (A == 0);
-	P.b.N = (A >> 7) > 0;
+	P.Z = (A == 0);
+	P.N = (A >> 7) > 0;
 	tick();
 }
 
@@ -2304,8 +2315,8 @@ void opXAA(uint16_t addr) {
 	uint8_t val = memGet(addr);
 	tick();
 	A = X & val;
-	P.b.N = (A & 0x80) > 0;
-	P.b.Z = (A == 0);
+	P.N = (A & 0x80) > 0;
+	P.Z = (A == 0);
 	pollInterrupts();
 }
 

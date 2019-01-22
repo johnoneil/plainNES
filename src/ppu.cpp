@@ -81,8 +81,8 @@ uint8_t OAMaddr;
 
 void init()
 {
-	scanline = 241; //To be consistant with nintendulator
-	dot = 0;
+	scanline = 0; //To be consistant with mesen
+	dot = 30;
 	frame = 0;
 	ppuClock = 0;
 	frameReady = false;
