@@ -211,6 +211,7 @@ std::array<uint16_t, 16> dmcRateTable {428, 380, 340, 320, 286, 254, 226, 214,
 bool frameInterruptRequest = false;
 unsigned int frameHalfCycle;
 unsigned long long cycle = 0;
+bool frameReset = false;
 
 //Raw Audio buffer
 //Size to roughly two frames of audio
@@ -237,27 +238,31 @@ void init()
 
 void step()
 {
+    if(frameReset && (cycle % 2) == 0) {
+        frameHalfCycle = 0;
+        frameReset = false;
+    }
     switch(frameHalfCycle) {
-        case 7457: //3728.5 full cycles
+        case 7459: //3728.5 full cycles
             clockEnvelopes();
             clockLinearCounter();
             break;
-        case 14913: //7456.5 full cycles
+        case 14915: //7456.5 full cycles
             clockEnvelopes();
             clockLinearCounter();
             clockLengthCounters();
             clockSweep();
             break;
-        case 22371: //11185.5 full cycles
+        case 22373: //11185.5 full cycles
             clockEnvelopes();
             clockLinearCounter();
             break;
-        case 29828: //14914 full cycles
+        case 29830: //14914 full cycles
             if(frameReg.frameMode == 0) {
                 if(frameReg.IRQinhibit == 0) frameInterruptRequest = true;
             }
             break;
-        case 29829: //14914.5 full cycles
+        case 29831: //14914.5 full cycles
             if(frameReg.frameMode == 0) {
                 if(frameReg.IRQinhibit == 0) frameInterruptRequest = true;
                 clockEnvelopes();
@@ -266,20 +271,25 @@ void step()
                 clockSweep();
             }
             break;
-        case 29830: //14915 full cycles
+        case 29832: //14915 full cycles
             if(frameReg.frameMode == 0) {
                 if(frameReg.IRQinhibit == 0) frameInterruptRequest = true;
-                frameHalfCycle = 0;
+                frameHalfCycle = 2;
             }
             break;
-        case 37281: //18640.5 full cycles
+        case 37283: //18640.5 full cycles
+            if(frameReg.frameMode > 0) {
+                clockEnvelopes();
+                clockLinearCounter();
+                clockLengthCounters();
+                clockSweep();
+                frameHalfCycle = 1;
+            }
+            break;
+        case 37289:
             clockEnvelopes();
             clockLinearCounter();
-            clockLengthCounters();
-            clockSweep();
-            break;
-        case 37282: //18641 full cycles
-            frameHalfCycle = 0;
+            frameHalfCycle = 7459;
             break;
     }
     ++frameHalfCycle;
@@ -573,7 +583,7 @@ void regSet(uint16_t addr, uint8_t val)
         case 0x4017:
             frameReg.value = val;
             if(frameReg.IRQinhibit) frameInterruptRequest = false;
-            frameHalfCycle = 0;
+            frameReset = true;
             if(frameReg.frameMode) { //Clock immediately
                 clockEnvelopes();
                 clockLinearCounter();
