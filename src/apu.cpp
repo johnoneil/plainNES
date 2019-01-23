@@ -60,7 +60,7 @@ struct NoiseReg0 {
 		uint8_t value;
         BitWorker<0, 4> volPeriod;
         BitWorker<4, 1> constVol;
-        BitWorker<5, 1> disableLenCtr;
+        BitWorker<5, 1> loopDisableLC;
 	};
 }  noiseReg0;
 
@@ -134,13 +134,14 @@ struct FrameReg {
 //Pulse 1
 uint8_t pulse1Volume = 0;
 uint8_t pulse1EnvDecay = 0;
-bool pulse1RestartEnv = false;
+bool pulse1StartEnv = false;
 uint8_t pulse1EnvDivider = 0;
 uint8_t pulse1SweepDivider = 0;
 bool pulse1SweepMute = false;
 bool pulse1SweepReload = false;
 uint8_t pulse1_lenCntr;
-uint16_t timerSetPulse1;
+uint16_t timerPeriodTargetPulse1;
+uint16_t timerPeriodPulse1;
 uint16_t timerPulse1;
 uint8_t outputPulse1;
 int dutyIdxPulse1;
@@ -159,13 +160,14 @@ std::array<uint8_t,0x20> lengthCounterArray = {
 //Pulse 2
 uint8_t pulse2Volume = 0;
 uint8_t pulse2EnvDecay = 0;
-bool pulse2RestartEnv = false;
+bool pulse2StartEnv = false;
 uint8_t pulse2EnvDivider = 0;
 uint8_t pulse2SweepDivider = 0;
 bool pulse2SweepMute = false;
 bool pulse2SweepReload = false;
 uint8_t pulse2_lenCntr;
-uint16_t timerSetPulse2;
+uint16_t timerPeriodTargetPulse2;
+uint16_t timerPeriodPulse2;
 uint16_t timerPulse2;
 uint8_t outputPulse2;
 int dutyIdxPulse2;
@@ -185,7 +187,7 @@ uint8_t triangleOutputArrayIdx = 0;
 //Noise
 uint8_t noiseVolume = 0;
 uint8_t noiseEnvDecay = 0;
-bool noiseRestartEnv = false;
+bool noiseStartEnv = false;
 uint8_t noiseEnvDivider = 0;
 uint8_t noise_lenCntr;
 uint16_t noiseShiftRegister;
@@ -330,7 +332,7 @@ void clockLengthCounters()
     if(noise_lenCntr) {
         if(controlReg.enableLCnoise == 0)
             noise_lenCntr = 0;
-        else if(noiseReg0.disableLenCtr == 0)
+        else if(noiseReg0.loopDisableLC == 0)
             --noise_lenCntr;
     }
     if(triangle_lenCntr) {
@@ -343,120 +345,128 @@ void clockLengthCounters()
 
 void clockEnvelopes() {
     //Pulse 1
-    if(pulse1RestartEnv) {
-        pulse1RestartEnv = false;
+    if(pulse1StartEnv) {
+        //Start flag set (due to $4003 write)
+        pulse1StartEnv = false;
         pulse1EnvDecay = 15;
-        pulse1EnvDivider = pulse1Reg0.volPeriod + 1;
+        pulse1EnvDivider = pulse1Reg0.volPeriod;
     }
     else {
-        if(pulse1EnvDivider == 0) {
-            pulse1EnvDivider = pulse1Reg0.volPeriod + 1;
-            if(pulse1EnvDecay == 0 && pulse1Reg0.loopDisableLC) {
-                pulse1EnvDecay = 15;
-            }
-            else if(pulse1EnvDecay > 0) {
-                --pulse1EnvDecay;
-            }
-        }
-        else {
+        //Decrement divider
+        if(pulse1EnvDivider > 0) {
             --pulse1EnvDivider;
         }
+        else {
+            //Divider at 0
+            pulse1EnvDivider = pulse1Reg0.volPeriod;
+            //Decrement decay counter
+            if(pulse1EnvDecay > 0) {
+                --pulse1EnvDecay;
+            }
+            else if(pulse1Reg0.loopDisableLC) {
+                pulse1EnvDecay = 15;
+            }
+        }
     }
-    if(pulse1Reg0.constVol == 0) pulse1Volume = pulse1EnvDecay;
+    if(pulse1Reg0.constVol) pulse1Volume = pulse1Reg0.volPeriod;
+    else pulse1Volume = pulse1EnvDecay;
+
 
     //Pulse 2
-    if(pulse2RestartEnv) {
-        pulse2RestartEnv = false;
+    if(pulse2StartEnv) {
+        //Start flag set (due to $4003 write)
+        pulse2StartEnv = false;
         pulse2EnvDecay = 15;
-        pulse2EnvDivider = pulse2Reg0.volPeriod + 1;
+        pulse2EnvDivider = pulse2Reg0.volPeriod;
     }
     else {
-        if(pulse2EnvDivider == 0) {
-            pulse2EnvDivider = pulse2Reg0.volPeriod + 1;
-            if(pulse2EnvDecay == 0 && pulse2Reg0.loopDisableLC) {
-                pulse2EnvDecay = 15;
-            }
-            else if(pulse2EnvDecay > 0) {
-                --pulse2EnvDecay;
-            }
-        }
-        else {
+        //Decrement divider
+        if(pulse2EnvDivider > 0) {
             --pulse2EnvDivider;
         }
+        else {
+            //Divider at 0
+            pulse2EnvDivider = pulse2Reg0.volPeriod;
+            //Decrement decay counter
+            if(pulse2EnvDecay > 0) {
+                --pulse2EnvDecay;
+            }
+            else if(pulse2Reg0.loopDisableLC) {
+                pulse2EnvDecay = 15;
+            }
+        }
     }
-    if(pulse2Reg0.constVol == 0) pulse2Volume = pulse2EnvDecay;
+    if(pulse2Reg0.constVol) pulse2Volume = pulse2Reg0.volPeriod;
+    else pulse2Volume = pulse2EnvDecay;
+
 
     //Noise
-    if(noiseRestartEnv) {
-        noiseRestartEnv = false;
+    if(noiseStartEnv) {
+        //Start flag set (due to $4003 write)
+        noiseStartEnv = false;
         noiseEnvDecay = 15;
-        noiseEnvDivider = noiseReg0.volPeriod + 1;
+        noiseEnvDivider = noiseReg0.volPeriod;
     }
     else {
-        if(noiseEnvDivider == 0) {
-            noiseEnvDivider = noiseReg0.volPeriod + 1;
-            if(noiseEnvDecay == 0 && noiseReg0.disableLenCtr) {
-                noiseEnvDecay = 15;
-            }
-            else if(noiseEnvDecay > 0) {
-                --noiseEnvDecay;
-            }
-        }
-        else {
+        //Decrement divider
+        if(noiseEnvDivider > 0) {
             --noiseEnvDivider;
         }
+        else {
+            //Divider at 0
+            noiseEnvDivider = noiseReg0.volPeriod;
+            //Decrement decay counter
+            if(noiseEnvDecay > 0) {
+                --noiseEnvDecay;
+            }
+            else if(noiseReg0.loopDisableLC) {
+                noiseEnvDecay = 15;
+            }
+        }
     }
-    if(noiseReg0.constVol == 0) noiseVolume = noiseEnvDecay;
+    if(noiseReg0.constVol) noiseVolume = noiseReg0.volPeriod;
+    else noiseVolume = noiseEnvDecay;
 }
 
 void clockSweep() {
     int16_t periodDelta;
+
     //Pulse 1
-    if(pulse1SweepDivider == 0) {
-        if(pulse1Reg1.sweepEnable && pulse1SweepMute == 0) {
-            //Modify the period
-            periodDelta = timerSetPulse1 >> pulse1Reg1.sweepShiftCount;
-            if(pulse1Reg1.sweepNegative) periodDelta = -periodDelta - 1;
-            timerSetPulse1 = timerPulse1 + periodDelta;
-            timerSetPulse1 &= 0x7FF;
-        }
+    if(pulse1Reg1.sweepEnable == 1 && pulse1SweepDivider == 0 && pulse1SweepMute == 0) {
+        periodDelta = timerPeriodTargetPulse1 >> pulse1Reg1.sweepShiftCount;
+        if(pulse1Reg1.sweepNegative == 1) timerPeriodTargetPulse1 -= periodDelta - 1;
+        else timerPeriodTargetPulse1 += periodDelta;
+        
+        timerPeriodPulse1 = timerPeriodTargetPulse1;
     }
+
     if(pulse1SweepDivider == 0 || pulse1SweepReload) {
         pulse1SweepDivider = pulse1Reg1.sweepPeriod;
         pulse1SweepReload = false;
     }
-    else {
+    else
         --pulse1SweepDivider;
-    }
-    //Check if channel should be muted
-    if(timerPulse1 < 8)
-        pulse1SweepMute = true;
-    else if(pulse1Reg1.sweepNegative == 0 && (timerSetPulse1 + (timerSetPulse1 >> pulse1Reg1.sweepShiftCount) > 0x7FF))
+    if(timerPeriodTargetPulse1 > 0x7FF || timerPeriodPulse1 < 8)
         pulse1SweepMute = true;
     else
         pulse1SweepMute = false;
     
     //Pulse 2
-    if(pulse2SweepDivider == 0) {
-        if(pulse2Reg1.sweepEnable && pulse2SweepMute == 0) {
-            //Modify the period
-            periodDelta = timerSetPulse2 >> pulse2Reg1.sweepShiftCount;
-            if(pulse2Reg1.sweepNegative) periodDelta = -periodDelta;
-            timerSetPulse2 = timerPulse2 + periodDelta;
-            timerSetPulse2 &= 0x7FF;
-        }
+    if(pulse2Reg1.sweepEnable == 1 && pulse2SweepDivider == 0 && pulse2SweepMute == 0) {
+        periodDelta = timerPeriodTargetPulse2 >> pulse2Reg1.sweepShiftCount;
+        if(pulse2Reg1.sweepNegative == 1) timerPeriodTargetPulse2 -= periodDelta - 1;
+        else timerPeriodTargetPulse2 += periodDelta;
+        
+        timerPeriodPulse2 = timerPeriodTargetPulse2;
     }
+
     if(pulse2SweepDivider == 0 || pulse2SweepReload) {
         pulse2SweepDivider = pulse2Reg1.sweepPeriod;
         pulse2SweepReload = false;
     }
-    else {
+    else
         --pulse2SweepDivider;
-    }
-    //Check if channel should be muted
-    if(timerPulse2 < 8)
-        pulse2SweepMute = true;
-    else if(pulse2Reg1.sweepNegative == 0 && (timerSetPulse2 + (timerSetPulse2 >> pulse2Reg1.sweepShiftCount) > 0x7FF))
+    if(timerPeriodTargetPulse2 > 0x7FF || timerPeriodPulse2 < 8)
         pulse2SweepMute = true;
     else
         pulse2SweepMute = false;
@@ -501,15 +511,16 @@ void regSet(uint16_t addr, uint8_t val)
             pulse1Reg1.value = val;
             break;
         case 0x4002:
-            timerSetPulse1 = (timerSetPulse1 & 0x700) | val;
+            timerPeriodPulse1 = (timerPeriodPulse1 & 0x700) | val;
             break;
         case 0x4003:
             pulse1Reg3.value = val;
-            timerSetPulse1 = (((uint16_t)pulse1Reg3.timerHigh) << 8) | (timerSetPulse1 & 0xFF);
+            timerPeriodPulse1 = (((uint16_t)pulse1Reg3.timerHigh) << 8) | (timerPeriodPulse1 & 0xFF);
             if(controlReg.enableLCpulse1) pulse1_lenCntr = lengthCounterArray[pulse1Reg3.lenCtrLoad];
-            timerPulse1 = timerSetPulse1;
+            timerPulse1 = timerPeriodPulse1;
+            timerPeriodTargetPulse1 = timerPeriodPulse1;
             dutyIdxPulse1 = 0;
-            pulse1RestartEnv = true;
+            pulse1StartEnv = true;
             break;
         case 0x4004:
             pulse2Reg0.value = val;
@@ -521,15 +532,16 @@ void regSet(uint16_t addr, uint8_t val)
             pulse2Reg1.value = val;
             break;
         case 0x4006:
-            timerSetPulse2 = (timerSetPulse2 & 0x700) | val;
+            timerPeriodPulse2 = (timerPeriodPulse2 & 0x700) | val;
             break;
         case 0x4007:
             pulse2Reg3.value = val;
-            timerSetPulse2 = (((uint16_t)pulse2Reg3.timerHigh) << 8) | (timerSetPulse2 & 0xFF);
+            timerPeriodPulse2 = (((uint16_t)pulse2Reg3.timerHigh) << 8) | (timerPeriodPulse2 & 0xFF);
             if(controlReg.enableLCpulse2) pulse2_lenCntr = lengthCounterArray[pulse2Reg3.lenCtrLoad];
-            timerPulse2 = timerSetPulse2;
+            timerPulse2 = timerPeriodPulse2;
+            timerPeriodTargetPulse2 = timerPeriodPulse2;
             dutyIdxPulse2 = 0;
-            pulse2RestartEnv = true;
+            pulse2StartEnv = true;
             break;
         case 0x4008:
             triReg0.value = val;
@@ -552,7 +564,7 @@ void regSet(uint16_t addr, uint8_t val)
             break;
         case 0x400F:
             noiseReg2.value = val;
-            noiseRestartEnv = true;
+            noiseStartEnv = true;
             break;
         case 0x4010:
             dmcReg0.value = val;
@@ -601,7 +613,7 @@ void stepPulse1() {
         --timerPulse1;
     }
     else {
-        timerPulse1 = timerSetPulse1;
+        timerPulse1 = timerPeriodPulse1;
         dutyIdxPulse1 = (dutyIdxPulse1 + 1) % 8;
     }
 
@@ -618,7 +630,7 @@ void stepPulse2() {
         --timerPulse2;
     }
     else {
-        timerPulse2 = timerSetPulse2;
+        timerPulse2 = timerPeriodPulse2;
         dutyIdxPulse2 = (dutyIdxPulse2 + 1) % 8;
     }
 
