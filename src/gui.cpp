@@ -41,19 +41,26 @@ std::array<uint32_t, 16*8 * 16*8> PTpixelMap;
 //whole number, so using a float accounts for rounding
 float rawSamplesPerSample = 1;
 
-
 int volatile audio_buffer_count, audio_rb_idx;
 int audio_wb_idx, audio_wb_pos;
 std::vector<std::array<int16_t, AUDIO_BUFFER_SIZE>> audio_buffers;
 SDL_sem * volatile audio_semaphore;
 long rawAudioBufferReadIdx = 0;
 
+bool showFPS = false;
+bool disableAudio = false;
+bool debugPPU = false;
+
 bool quit = false;
 bool LctrlPressed = false;
 bool RctrlPressed = false;
 
-int init()
+int init(bool fpsFlag, bool disableAudioFlag, bool debugPPUflag)
 {
+    showFPS = fpsFlag;
+    disableAudio = disableAudioFlag;
+    debugPPU = debugPPUflag;
+
     RENDER::init();
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_NOPARACHUTE) < 0) {
@@ -71,9 +78,11 @@ int init()
         return 1;
     }
 
-    if(initPPUWindow()) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize Main Window: %s", SDL_GetError());
-        return 1;
+    if(debugPPU) {
+        if(initPPUWindow()) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize Main Window: %s", SDL_GetError());
+            return 1;
+        }
     }
 
     if(initAudio()) {
@@ -304,8 +313,11 @@ void update()
     IO::controller_state[1] = 0;
 
     updateMainWindow();
-    updatePPUWindow();
-    updateAudio();
+    if(debugPPU) {
+        updatePPUWindow();
+    }
+    if(disableAudio == false)
+        updateAudio();
 
 }
 
@@ -316,15 +328,16 @@ void updateMainWindow() {
     SDL_RenderCopy(mainrenderer, maintexture, NULL, NULL);
 
     //FPS text
-    //TODO: Make optional
-    snprintf(FPStext, sizeof(FPStext), "%.2f", avgFPS);
-    FPStextSurface = TTF_RenderText_Blended( gFont, FPStext, FPStextColor );
-    textRect.w = FPStextSurface->w;
-    textRect.h = FPStextSurface->h;
-    textRect.x = SCREEN_WIDTH-textRect.w;
-    textRect.y = 0;
-    FPStextTexture = SDL_CreateTextureFromSurface(mainrenderer, FPStextSurface);
-    SDL_RenderCopy(mainrenderer, FPStextTexture, NULL, &textRect);
+    if(showFPS) {
+        snprintf(FPStext, sizeof(FPStext), "%.2f", avgFPS);
+        FPStextSurface = TTF_RenderText_Blended( gFont, FPStext, FPStextColor );
+        textRect.w = FPStextSurface->w;
+        textRect.h = FPStextSurface->h;
+        textRect.x = SCREEN_WIDTH-textRect.w;
+        textRect.y = 0;
+        FPStextTexture = SDL_CreateTextureFromSurface(mainrenderer, FPStextSurface);
+        SDL_RenderCopy(mainrenderer, FPStextTexture, NULL, &textRect);
+    }
 
     SDL_RenderPresent(mainrenderer);
 }
@@ -363,12 +376,9 @@ void updateAudio() {
     //TODO: Look into using FIR filter or similar
     int size = APU::rawAudioBufferWriteIdx - rawAudioBufferReadIdx;
     if(size < 0) size += APU::rawAudioBuffer.size();
-    //std::cout << size;
-    //int newbufferCnt = 0;
+
     float currentRawBufferIdx = rawAudioBufferReadIdx;
     while(size > 0) {
-        //++newbufferCnt;
-        //audio_buffers[audio_wb_idx][audio_wb_pos] = (int16_t)(APU::rawAudioBuffer[(unsigned int)currentRawBufferIdx] * (1 << 14));
         audio_buffers[audio_wb_idx][audio_wb_pos] = (int16_t)((APU::rawAudioBuffer[(unsigned int)currentRawBufferIdx]*2.0f - 1.0f) * 0xFFF);
         currentRawBufferIdx += rawSamplesPerSample;
         if(currentRawBufferIdx >= APU::rawAudioBuffer.size()) currentRawBufferIdx -= (float)APU::rawAudioBuffer.size();
@@ -384,7 +394,6 @@ void updateAudio() {
         }
     }
     rawAudioBufferReadIdx = currentRawBufferIdx;
-    //std::cout << " -> " << newbufferCnt << std::endl;
 }
 
 void fill_audio_buffer(void *user_data, uint8_t *out, int byte_count) {

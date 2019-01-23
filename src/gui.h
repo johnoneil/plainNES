@@ -17,7 +17,7 @@ extern float avgFPS;
 
 extern bool quit;
 
-int init();
+int init(bool fpsFlag = false, bool disableAudioFlag = false, bool debugPPUflag = false);
 int initMainWindow();
 int initPPUWindow();
 int initAudio();

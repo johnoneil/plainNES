@@ -19,7 +19,7 @@ INCLUDE_PATHS = -IC:\dev_libs\SDL2\include\SDL2 -IC:/dev_libs/boost/include/boos
 LINK_LIBRARIES = -LC:\dev_libs\boost\lib -LC:\dev_libs\SDL2\lib
 
 # LINKER_FLAGS
-LINKER_FLAGS = -lmingw32 -lSDL2main -lSDL2 -lSDL2_ttf -lboost_chrono-mgw63-mt-x32-1_69
+LINKER_FLAGS = -lmingw32 -lSDL2main -lSDL2 -lSDL2_ttf -lboost_chrono-mgw63-mt-x32-1_69 -lboost_program_options-mgw63-mt-x32-1_69
 
 # Files and folders
 #SRC_FILES = main.cpp gamepak.cpp cpu.cpp
