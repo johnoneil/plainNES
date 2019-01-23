@@ -558,6 +558,8 @@ void regSet(uint16_t addr, uint8_t val)
             break;
         case 0x400C:
             noiseReg0.value = val;
+            if(noiseReg0.constVol) noiseVolume = noiseReg0.volPeriod;
+            else noiseVolume = noiseEnvDecay;
             break;
         case 0x400E:
             noiseReg1.value = val;
@@ -565,6 +567,7 @@ void regSet(uint16_t addr, uint8_t val)
         case 0x400F:
             noiseReg2.value = val;
             noiseStartEnv = true;
+            if(controlReg.enableLCnoise) noise_lenCntr = lengthCounterArray[noiseReg2.lenCtrLoad];
             break;
         case 0x4010:
             dmcReg0.value = val;
@@ -669,8 +672,9 @@ void stepNoise() {
         else
             feedback = (noiseShiftRegister & 1) ^ ((noiseShiftRegister >> 6) & 1);
         noiseShiftRegister >>= 1;
-        noiseShiftRegister = (noiseShiftRegister & !0x4000) | (feedback << 14);
+        noiseShiftRegister = (noiseShiftRegister & 0x3FFF) | (feedback << 14);
     }
+
     if(((noiseShiftRegister & 1) == 0) && noise_lenCntr > 0)
         outputNoise = noiseVolume;
     else
