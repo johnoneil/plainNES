@@ -1401,15 +1401,15 @@ void opAHX(uint16_t addr) {
 }
 
 void opALR(uint16_t addr) {
+	// AND M followed by LSR A
 	uint8_t M = memGet(addr);
 	pollInterrupts();
 	tick();
 	A &= M;
-	P.C = M & 1;
-	M = M >> 1;
-	memSet(addr, M);
-	P.Z = (M == 0);
-	P.N = (M >> 7) > 0;
+	P.C = A & 1; //Set to old A per LSR behavior
+	A = A >> 1;
+	P.Z = (A == 0);
+	P.N = (A >> 7) > 0;
 }
 
 void opANC(uint16_t addr) {
@@ -1433,24 +1433,27 @@ void opAND(uint16_t addr) {
 }
 
 void opARR(uint16_t addr) {
+	//AND M followed by ROR A
+	//Uses strange logic for flags
+	//See http://www.6502.org/users/andre/petindex/local/64doc.txt
+
 	uint8_t M = memGet(addr);
 	pollInterrupts();
 	tick();
 	A &= M;
-	uint8_t C0 = P.C;
-	P.C = (M & 1);
-	M = M >> 1;
-	M |= (C0 << 7);
-	memSet(addr, M);
-	P.Z = (M == 0);
-	P.N = (A >> 7) > 0;
+
+	A = (A >> 1) | (P.C << 7);
+	P.N = P.C;
+	P.Z = (A == 0);
+	P.C = (A & 0x40) ? 1 : 0;
+	P.V = (P.C ^ ((A >> 5) & 1)) ? 1 : 0;
 }
 
 void opASL() {
-	P.C = (A >> 7) > 0;
+	P.C = ((A >> 7) > 0) ? 1 : 0;
 	A = A << 1;
-	P.Z = (A == 0);
-	P.N = (A >> 7) > 0;
+	P.Z = (A == 0) ? 1 : 0;
+	P.N = ((A >> 7) > 0) ? 1 : 0;
 	pollInterrupts();
 	tick();
 }
@@ -1461,19 +1464,23 @@ void opASL(uint16_t addr) {
 	tick();
 	memSet(addr, M); //Dummy write
 	tick();
-	P.C = (M >> 7) > 0;
+	P.C = ((M >> 7) > 0) ? 1 : 0;
 	M = M << 1;
-	P.Z = (A == 0);
-	P.N = (M >> 7) > 0;
+	P.Z = (M == 0) ? 1 : 0;
+	P.N = ((M >> 7) > 0) ? 1 : 0;
 	memSet(addr, M);
 	tick();
 	pollInterrupts();
 }
 
 void opAXS(uint16_t addr) {
-	memSet(addr, A&X);
-	pollInterrupts();
+	uint8_t M = memGet(addr);
 	tick();
+	P.C = ((A & X) >= M) ? 1 : 0;
+	X = (A & X) - M;
+	P.N = ((X >> 7) > 0) ? 1 : 0;
+	P.Z = (X == 0) ? 1 : 0;
+	pollInterrupts();
 }
 
 void opBCC() {
@@ -1583,7 +1590,10 @@ void opBPL() {
 }
 
 void opBRK() {
-	uint16_t newaddr;
+	memGet(PC); //Dummy read
+	if(interruptOccured == false) //PC increment suppressed during interrupt commanded BRK
+		++PC;
+	tick();
 
 	memSet(((uint16_t)0x01 << 8) | SP, PC >> 8);
 	--SP;
@@ -1595,6 +1605,7 @@ void opBRK() {
 	//Copy P since the B flag is only passed onto stack
 	int8_t oldP = P.value;
 
+	uint16_t newaddr;
 	//Will catch interrupts here
 	if(NMI_triggered || NMI_request) {
 		newaddr = 0xFFFA;
@@ -1621,7 +1632,6 @@ void opBRK() {
 	uint16_t addr = memGet(newaddr);
 	tick();
 	addr |= memGet(newaddr+1) << 8;
-	tick();
 	PC = addr;
 	tick();
 	pollInterrupts();
@@ -1843,15 +1853,12 @@ void opISC(uint16_t addr) {
 	memSet(addr, M);
 	tick();
 	M = ~M;
-	if(P.C)
-		M += 1;
-	uint8_t oldA = A;
-	A += M;
-
-	P.C = (A <= oldA);
-	P.V = ((oldA^A)&(M^A)&0x80) != 0;
-	P.Z = (A == 0);
-	P.N = (A >> 7) == 1;
+	uint16_t sum = A + M + P.C;
+	P.C = (sum > 0xFF) ? 1 : 0;
+	P.V = (~(A^M) & (A^((uint8_t)sum)) & 0x80) ? 1 : 0;
+	A = (uint8_t)sum;
+	P.Z = (A == 0) ? 1 : 0;
+	P.N = ((A >> 7) > 0) ? 1 : 0;
 	pollInterrupts();
 }
 
@@ -2044,11 +2051,10 @@ void opRLA(uint16_t addr) {
 void opROL() {
 	pollInterrupts();
 	uint8_t C0 = P.C;
-	P.C = (A >> 7) > 0;
-	A = A << 1;
-	A |= C0;
-	P.Z = (A == 0);
-	P.N = (A >> 7) > 0;
+	P.C = ((A >> 7) > 0) ? 1 : 0;
+	A = (A << 1) | C0;
+	P.Z = (A == 0) ? 1 : 0;
+	P.N = ((A >> 7) > 0) ? 1 : 0;
 	tick();
 }
 
@@ -2059,12 +2065,11 @@ void opROL(uint16_t addr) {
 	memSet(addr, M); //Dummy write
 	tick();
 	uint8_t C0 = P.C;
-	P.C = (M >> 7) > 0;
-	M = M << 1;
-	M |= C0;
+	P.C = ((M >> 7) > 0) ? 1 : 0;
+	M = (M << 1) | C0;
+	P.Z = (M == 0) ? 1 : 0;
+	P.N = ((M >> 7) > 0) ? 1 : 0;
 	memSet(addr, M);
-	P.Z = (M == 0);
-	P.N = (A >> 7) > 0;
 	tick();
 	pollInterrupts();
 }
@@ -2086,7 +2091,7 @@ void opROR(uint16_t addr) {
 	tick();
 	memSet(addr, M); //Dummy write
 	tick();
-	bool C0 = P.C;
+	uint8_t C0 = P.C;
 	P.C = (M & 1);
 	M = M >> 1;
 	M |= C0 ? (1 << 7) : 0;
@@ -2105,15 +2110,15 @@ void opRRA(uint16_t addr) {
 	uint8_t C0 = P.C;
 	P.C = (M & 1);
 	M = M >> 1;
-	M |= (C0 << 7);
+	M |= C0 ? (1 << 7) : 0;
 	memSet(addr, M);
 	tick();
-	uint8_t oldA = A;
-	A += M + P.C;
-	P.C = (A < oldA);
-	P.V = ((oldA^A)&(M^A)&0x80) != 0;
-	P.Z = (A == 0);
-	P.N = (A >> 7) == 1;
+	uint16_t sum = A + M + P.C;
+	P.C = (sum > 0xFF) ? 1 : 0;
+	P.V = (~(A^M) & (A^((uint8_t)sum)) & 0x80) ? 1 : 0;
+	A = (uint8_t)sum;
+	P.Z = (A == 0) ? 1 : 0;
+	P.N = ((A >> 7) > 0) ? 1 : 0;
 	pollInterrupts();
 }
 
@@ -2188,15 +2193,19 @@ void opSEI() {
 }
 
 void opSHX(uint16_t addr) {
-	uint8_t val = X & (addr >> 8);
-	memSet(addr, val);
+	uint8_t H = addr >> 8;
+	uint8_t L = addr & 0xFF;
+	uint8_t val = X & (H + 1);
+	memSet(((uint16_t)val << 8) | L, val);
 	tick();
 	pollInterrupts();
 }
 
 void opSHY(uint16_t addr) {
-	uint8_t val = Y & (addr >> 8);
-	memSet(addr, val);
+	uint8_t H = addr >> 8;
+	uint8_t L = addr & 0xFF;
+	uint8_t val = Y & (H + 1);
+	memSet(((uint16_t)val << 8) | L, val);
 	tick();
 	pollInterrupts();
 }

@@ -3,9 +3,9 @@ A NES emulator written in C++
 
 Uses Boost and SDL2 libraries
 
-The emulator is still largely a work in progress.
+The emulator is still a work in progress.
 
-The current version has a fully functional CPU, including unofficial opcodes, and passes NESTest and a growing number of other test ROMs. The PPU works well enough to display many test ROMs and some games. The APU also works, with some audio glitches.
+The current version has a fully functional CPU, including unofficial opcodes, and passes NESTest and most CPU test ROMs. The PPU works well enough to display many test ROMs and many games. The APU also works, with some audio glitches.
 
 Controls are hardcoded at this time:
 
