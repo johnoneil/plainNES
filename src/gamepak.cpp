@@ -16,7 +16,7 @@ Mapper *mapper;
 const char* headerName = "NES\x1A";
 iNES_Header header;
 
-int init(std::ifstream &file) {
+int loadROM(std::ifstream &file) {
 	std::array<char, 16> headerdata;
 	uint8_t mapperNum;
 
@@ -60,6 +60,15 @@ int init(std::ifstream &file) {
 	mapper->loadData(header, file);
 	
 	return 0;
+}
+
+void powerOn() {
+	mapper->powerOn();
+}
+
+void reset()
+{
+	mapper->reset();
 }
 
 uint8_t CPUmemGet(uint16_t addr) {

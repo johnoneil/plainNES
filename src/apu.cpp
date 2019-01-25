@@ -220,7 +220,7 @@ bool frameReset = false;
 std::array<float, 31> pulseMixerTable;
 std::array<float, 203> tndMixerTable;
 
-void init()
+void powerOn()
 {
     generateMixerTables();
     regSet(0x4015, 0); //Disables all channels
@@ -229,6 +229,11 @@ void init()
         regSet(addr, 0);
     frameHalfCycle = 0;
     noiseShiftRegister = 1;
+}
+
+void reset()
+{
+    
 }
 
 void step()

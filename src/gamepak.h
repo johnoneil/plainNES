@@ -21,12 +21,14 @@ struct iNES_Header {
 	uint8_t prgRAM8cnt;			//bytes 8
 }__attribute__((packed));
 
-int init(std::ifstream &file);
+int loadROM(std::ifstream &file);
+void powerOn();
+void reset();
+
 uint8_t CPUmemGet(uint16_t addr);
 void CPUmemSet(uint16_t addr, uint8_t val);
 uint8_t PPUmemGet(uint16_t addr);
 void PPUmemSet(uint16_t addr, uint8_t val);
-int loadROM(std::ifstream &file);
 
 
-}
+} //GAMEPAK

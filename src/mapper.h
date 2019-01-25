@@ -20,5 +20,9 @@ class Mapper {
 
     //Load rom file into memory
     virtual void loadData(GAMEPAK::iNES_Header header, std::ifstream &file);
+
+    //Handles mapper behavior at powerOn or reset
+    virtual void powerOn();
+    virtual void reset();
 };
 

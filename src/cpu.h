@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <string>
 
 namespace CPU {
 
@@ -14,26 +15,25 @@ enum OpType {
 
 extern uint8_t busVal;
 
-extern bool alive;
-extern unsigned long long cycle;
-extern bool enableLogging;
+extern unsigned long long cpuCycle;
 
-void init(bool logging = false);
+void powerOn();
 void reset();
 void step();
 void tick();
-long long getCycles();
+
 uint8_t memGet(uint16_t addr);
 void memSet(uint16_t addr, uint8_t val);
+
 void OAMDMA_write();
 void pollInterrupts();
 void triggerNMI();
 void triggerIRQ();
 void unsetIRQ();
-void getStateString();
-void logStep();
-void closeLog();
 void setPC(uint16_t newPC);
+
+void logStep();
+void logInterrupt(std::string txt);
 
 //Addressing functions
 uint16_t Immediate();

@@ -79,7 +79,7 @@ uint8_t OAMaddr;
 /////////////////// Functions //////////////////////
 ////////////////////////////////////////////////////
 
-void init()
+void powerOn()
 {
 	scanline = 0; //To be consistant with mesen
 	dot = 30;
