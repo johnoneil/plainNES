@@ -81,7 +81,7 @@ uint8_t OAMaddr;
 
 void powerOn()
 {
-	scanline = 0; //To be consistant with mesen
+	scanline = 0; //To be consistant with mesen for log comparison
 	dot = 30;
 	frame = 0;
 	ppuClock = 0;

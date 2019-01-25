@@ -233,7 +233,7 @@ void powerOn()
 
 void reset()
 {
-    
+    regSet(0x4015, 0);
 }
 
 void step()

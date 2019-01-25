@@ -145,16 +145,13 @@ void powerOn() {
 	IRQ_request = IRQ_triggered = false;
 	interruptOccured = false;
 	cpuCycle = 0;
-	for(int i = 0; i < 2048; ++i)
-		RAM[i] = 0;
+	RAM.fill(0);
 }
 
 void reset() {
 	//Per https://wiki.nesdev.com/w/index.php/CPU_power_up_state
 	reg.SP -= 3;
 	reg.P.I = true;
-	memSet(0x4015, 0);
-	PPU::reset();
 	reg.PC = memGet(0xFFFC) | memGet(0xFFFD) << 8;
 }
 
