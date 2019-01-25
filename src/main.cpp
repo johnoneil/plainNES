@@ -1,3 +1,5 @@
+#include "nes.h"
+#include "gui.h"
 #include <iostream>
 #include <iomanip>
 #include <fstream>
@@ -6,23 +8,8 @@
 #include <boost/program_options.hpp>
 #include <boost/chrono.hpp>
 
-#include "gui.h"
-#include "cpu.h"
-#include "ppu.h"
-#include "io.h"
-#include "apu.h"
-#include "gamepak.h"
-
-
 int main(int argc, char *argv[])
 {
-	bool debug_PC_start_flag = false;
-	uint16_t debug_PC_start;
-	bool loggingFlag = false;
-	bool fpsFlag = false;
-	bool disableAudioFlag = false;
-	bool debugPPUflag = false;
-
 	namespace po = boost::program_options;
 	po::options_description desc("Options");
 	desc.add_options()
@@ -41,7 +28,6 @@ int main(int argc, char *argv[])
 	try
 	{
 		po::store(po::command_line_parser(argc, argv).options(desc).positional(p).run(), vm);
-		//po::store(po::parse_command_line(argc, argv, desc), vm);
 		po::notify(vm);
 
 		if(vm.count("help")) {
@@ -57,43 +43,30 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	std::ifstream file;
-	if(vm.count("file")) {
-		file.open(vm["file"].as<std::string>(),std::ios::binary);
-		if(file.fail()) {
-			std::cout << "Error opening file" << std::endl;
-			return -1;
-		}
-	}
-	else {
-		std::cout << "Rom filename must be included as an argument" << std::endl;
-		return -1;
+	int guiOptions = 0;
+	int emuOptions = 0;
+
+	if(vm.count("file") == 0) {
+		std::cout << "ROM filename must be included as an argument" << std::endl;
+		return 1;
 	}
 
 	if(vm.count("PC")) {
-		debug_PC_start_flag = true;
-		debug_PC_start = vm["PC"].as<uint16_t>();
+		emuOptions |= NES::SET_PC_START;
+		NES::PC_debug_start = vm["PC"].as<uint16_t>();
 	}
 
-	if(vm.count("log")) loggingFlag = true;
-	if(vm.count("debugPPU")) debugPPUflag = true;
-	if(vm.count("FPS")) fpsFlag = true;
-	if(vm.count("disableAudio")) disableAudioFlag = true;
-	
-	if(GAMEPAK::init(file) < 0) {
-		std::cout << "Invalid file\n" << std::endl;
-		return -1;
-	}
-	file.close();
-	
-	GUI::init(fpsFlag, disableAudioFlag, debugPPUflag);
-	CPU::init(loggingFlag);
-	PPU::init();
-	APU::init();
+	if(vm.count("log")) emuOptions |= NES::LOGGING;
+	if(vm.count("debugPPU")) guiOptions |= GUI::PPU_DEBUG;
+	if(vm.count("FPS")) guiOptions |= GUI::DISPLAY_FPS;
+	if(vm.count("disableAudio")) guiOptions |= GUI::DISABLE_AUDIO;
 
-	if(debug_PC_start_flag) {
-		CPU::setPC(debug_PC_start);
-	}
+	NES::setOptions(emuOptions);
+	GUI::setOptions(guiOptions);
+
+	GUI::init();
+	NES::loadROM(vm["file"].as<std::string>());
+	NES::powerOn();
 
 	int framenum = 0;
 	const int avgWindow = 30;
@@ -101,36 +74,19 @@ int main(int argc, char *argv[])
 	boost::chrono::nanoseconds avgFrameDuration_ns;
 
 	frameStart = boost::chrono::high_resolution_clock::now();
-	try {
-		while(GUI::quit == 0 && CPU::alive)
-		{
-			if(framenum >= avgWindow) {
-				frameEnd = boost::chrono::high_resolution_clock::now();
-				avgFrameDuration_ns = (frameEnd - frameStart)/avgWindow;
-				frameStart = frameEnd;
-				GUI::avgFPS = 1000000000.0f/(avgFrameDuration_ns.count());
-				framenum = 0;
-			}
-			++framenum;
-
-			GUI::update();
-			PPU::setframeReady(false);
-			while(PPU::isframeReady() == 0) {
-				CPU::step();
-			}
-		}
-	}
-	catch (std::exception& e)
+	while(GUI::quit == 0 && NES::running)
 	{
-		std::cout << "Standard exception: " << e.what() << std::endl;
-	}
-	catch (int e) {
-		if(e == 1) {
-			std::cout << "Ending program due to invalid opcode" << std::endl;
+		if(framenum >= avgWindow) {
+			frameEnd = boost::chrono::high_resolution_clock::now();
+			avgFrameDuration_ns = (frameEnd - frameStart)/avgWindow;
+			frameStart = frameEnd;
+			GUI::avgFPS = 1000000000.0f/(avgFrameDuration_ns.count());
+			framenum = 0;
 		}
-		else {
-			std::cout << "Ending program due to unexpected error " << e << std::endl;
-		}
+		++framenum;
+
+		GUI::update();
+		NES::frameStep();
 	}
 		
 	GUI::close();

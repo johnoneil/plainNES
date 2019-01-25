@@ -4,6 +4,13 @@
 
 namespace GUI {
 
+enum Options
+{
+    DISPLAY_FPS     = 1 << 0,
+    PPU_DEBUG       = 1 << 1,
+    DISABLE_AUDIO   = 1 << 2,
+};
+
 const int SCREEN_WIDTH = 256;
 const int SCREEN_HEIGHT = 240;
 const int SCREEN_SCALE = 2;
@@ -17,7 +24,8 @@ extern float avgFPS;
 
 extern bool quit;
 
-int init(bool fpsFlag = false, bool disableAudioFlag = false, bool debugPPUflag = false);
+void setOptions(int options);
+int init();
 int initMainWindow();
 int initPPUWindow();
 int initAudio();

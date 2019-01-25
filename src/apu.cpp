@@ -1,4 +1,5 @@
 #include "apu.h"
+#include "nes.h"
 #include "cpu.h"
 #include "utils.h"
 #include <array>
@@ -215,17 +216,9 @@ unsigned int frameHalfCycle;
 unsigned long long cycle = 0;
 bool frameReset = false;
 
-//Raw Audio buffer
-//Size to roughly two frames of audio
-std::array<float, APU_AUDIO_RATE/30> rawAudioBuffer;
-long rawAudioBufferWriteIdx = 0;
-
 //Audio Mixer
 std::array<float, 31> pulseMixerTable;
 std::array<float, 203> tndMixerTable;
-
-
-
 
 void init()
 {
@@ -738,8 +731,8 @@ void mixOutput() {
     float output;
     output = pulseMixerTable[outputPulse1 + outputPulse2];
     output += tndMixerTable[3 * outputTriangle + 2 * outputNoise + outputDMC];
-    rawAudioBuffer[rawAudioBufferWriteIdx] = output;
-    rawAudioBufferWriteIdx = (rawAudioBufferWriteIdx+1) % rawAudioBuffer.size();
+    NES::rawAudio.buffer[NES::rawAudio.writeIdx] = output;
+    NES::rawAudio.writeIdx = (NES::rawAudio.writeIdx+1) % NES::rawAudio.buffer.size();
 }
 
 void generateMixerTables() {

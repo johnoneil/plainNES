@@ -30,11 +30,11 @@ int init(std::ifstream &file) {
 		for(int i=0; i<4; i++)
 			std::cout << std::hex << int(headerdata[i]) << " ";
 		std::cout << std::endl;
-		return -1;
+		return 1;
 	}
 	if(((headerdata[7] >> 2) & 0x03) == 2) {
 		std::cout << "iNES2 header format. Not yet implemented\n";
-		return -1;
+		return 1;
 	}
 
 	memcpy(&header, headerdata.data(), sizeof(header));
@@ -54,12 +54,12 @@ int init(std::ifstream &file) {
 
 	if(mapper == NULL) {
 		std::cout << "Unsupported mapper: " << (int)mapperNum << std::endl;
-		return -1;
+		return 1;
 	}
 
 	mapper->loadData(header, file);
 	
-	return 1;
+	return 0;
 }
 
 uint8_t CPUmemGet(uint16_t addr) {

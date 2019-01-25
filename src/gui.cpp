@@ -1,9 +1,6 @@
 #include "gui.h"
+#include "nes.h"
 #include "render.h"
-#include "ppu.h"
-#include "io.h"
-#include "cpu.h"
-#include "apu.h"
 #include <SDL.h>
 #include <SDL_ttf.h>
 #include <cstring>
@@ -45,7 +42,6 @@ int volatile audio_buffer_count, audio_rb_idx;
 int audio_wb_idx, audio_wb_pos;
 std::vector<std::array<int16_t, AUDIO_BUFFER_SIZE>> audio_buffers;
 SDL_sem * volatile audio_semaphore;
-long rawAudioBufferReadIdx = 0;
 
 bool showFPS = false;
 bool disableAudio = false;
@@ -55,12 +51,15 @@ bool quit = false;
 bool LctrlPressed = false;
 bool RctrlPressed = false;
 
-int init(bool fpsFlag, bool disableAudioFlag, bool debugPPUflag)
+void setOptions(int options)
 {
-    showFPS = fpsFlag;
-    disableAudio = disableAudioFlag;
-    debugPPU = debugPPUflag;
+    showFPS = (options & DISPLAY_FPS) > 0;
+    debugPPU = (options & PPU_DEBUG) > 0;
+    disableAudio = (options & DISABLE_AUDIO) > 0;
+}
 
+int init()
+{
     RENDER::init();
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_NOPARACHUTE) < 0) {
@@ -174,10 +173,10 @@ int initPPUWindow() {
             uint32_t paletteARGB;
             uint8_t paletteByte;
             if(j == 0) {
-                paletteByte = PPU::getPalette(0x3F00);
+                paletteByte = NES::getPalette(0x3F00);
             }
             else {
-                paletteByte = PPU::getPalette(0x3F00 + i*4 + j);
+                paletteByte = NES::getPalette(0x3F00 + i*4 + j);
             }
             RENDER::convertNTSC2ARGB(&paletteARGB, &paletteByte, 1);
             SDL_SetRenderDrawColor(PPUrenderer, (paletteARGB >> 16) & 0xFF, (paletteARGB >> 8) & 0xFF, paletteARGB & 0xFF, 255);
@@ -195,7 +194,7 @@ int initAudio() {
     audio_wb_idx = 0;
     audio_wb_pos = 0;
 
-    rawSamplesPerSample = (float)APU::APU_AUDIO_RATE/AUDIO_SAMPLE_RATE;
+    rawSamplesPerSample = (float)NES::APU_CLOCK_RATE/AUDIO_SAMPLE_RATE;
 
     //Create audio buffer
     int32_t sample_latency = WANTED_AUDIO_LATENCY_MS * AUDIO_SAMPLE_RATE * AUDIO_CHANNELS / 1000;
@@ -238,32 +237,32 @@ void update()
                     RctrlPressed = true;
                     break;
                 case SDLK_x:
-                    IO::controller_state[0] |= 1;
+                    NES::controller_state[0] |= 1;
                     break;
                 case SDLK_z:
-                    IO::controller_state[0] |= (1<<1);
+                    NES::controller_state[0] |= (1<<1);
                     break;
                 case SDLK_SPACE:
-                    IO::controller_state[0] |= (1<<2);
+                    NES::controller_state[0] |= (1<<2);
                     break;
                 case SDLK_RETURN:
-                    IO::controller_state[0] |= (1<<3);
+                    NES::controller_state[0] |= (1<<3);
                     break;
                 case SDLK_UP:
-                    IO::controller_state[0] |= (1<<4);
+                    NES::controller_state[0] |= (1<<4);
                     break;
                 case SDLK_DOWN:
-                    IO::controller_state[0] |= (1<<5);
+                    NES::controller_state[0] |= (1<<5);
                     break;
                 case SDLK_LEFT:
-                    IO::controller_state[0] |= (1<<6);
+                    NES::controller_state[0] |= (1<<6);
                     break;
                 case SDLK_RIGHT:
-                    IO::controller_state[0] |= (1<<7);
+                    NES::controller_state[0] |= (1<<7);
                     break;
                 case SDLK_r:
                     if(LctrlPressed || RctrlPressed) {
-                        CPU::reset();
+                        NES::reset();
                     }
                     break;
                 case SDLK_ESCAPE:
@@ -282,35 +281,35 @@ void update()
                     RctrlPressed = false;
                     break;
                 case SDLK_x:
-                    IO::controller_state[0] &= ~1;
+                    NES::controller_state[0] &= ~1;
                     break;
                 case SDLK_z:
-                    IO::controller_state[0] &= ~(1<<1);
+                    NES::controller_state[0] &= ~(1<<1);
                     break;
                 case SDLK_SPACE:
-                    IO::controller_state[0] &= ~(1<<2);
+                    NES::controller_state[0] &= ~(1<<2);
                     break;
                 case SDLK_RETURN:
-                    IO::controller_state[0] &= ~(1<<3);
+                    NES::controller_state[0] &= ~(1<<3);
                     break;
                 case SDLK_UP:
-                    IO::controller_state[0] &= ~(1<<4);
+                    NES::controller_state[0] &= ~(1<<4);
                     break;
                 case SDLK_DOWN:
-                    IO::controller_state[0] &= ~(1<<5);
+                    NES::controller_state[0] &= ~(1<<5);
                     break;
                 case SDLK_LEFT:
-                    IO::controller_state[0] &= ~(1<<6);
+                    NES::controller_state[0] &= ~(1<<6);
                     break;
                 case SDLK_RIGHT:
-                    IO::controller_state[0] &= ~(1<<7);
+                    NES::controller_state[0] &= ~(1<<7);
                     break;
             }
         }
     }
 
     //Update controller 2 keypresses
-    IO::controller_state[1] = 0;
+    NES::controller_state[1] = 0;
 
     updateMainWindow();
     if(debugPPU) {
@@ -322,7 +321,7 @@ void update()
 }
 
 void updateMainWindow() {
-    RENDER::convertNTSC2ARGB(mainpixelMap.data(), PPU::getPixelMap(), SCREEN_WIDTH*SCREEN_HEIGHT);
+    RENDER::convertNTSC2ARGB(mainpixelMap.data(), NES::getPixelMap(), SCREEN_WIDTH*SCREEN_HEIGHT);
 
     SDL_UpdateTexture(maintexture, NULL, mainpixelMap.data(), SCREEN_WIDTH*4);
     SDL_RenderCopy(mainrenderer, maintexture, NULL, NULL);
@@ -343,7 +342,7 @@ void updateMainWindow() {
 }
 
 void updatePPUWindow() {
-    std::array<std::array<uint8_t, 16*16*64>, 2> PTarrays = PPU::getPatternTableBuffers();
+    std::array<std::array<uint8_t, 16*16*64>, 2> PTarrays = NES::getPatternTableBuffers();
     RENDER::convertNTSC2ARGB(PTpixelMap.data(), PTarrays[0].data(), PTarrays[0].size());
     SDL_UpdateTexture(PTtexture0, NULL, PTpixelMap.data(), 16*8*4);
     RENDER::convertNTSC2ARGB(PTpixelMap.data(), PTarrays[1].data(), PTarrays[1].size());
@@ -357,10 +356,10 @@ void updatePPUWindow() {
             uint32_t paletteARGB;
             uint8_t paletteByte;
             if(j == 0) {
-                paletteByte = PPU::getPalette(0x3F00);
+                paletteByte = NES::getPalette(0x3F00);
             }
             else {
-                paletteByte = PPU::getPalette(0x3F00 + i*4 + j);
+                paletteByte = NES::getPalette(0x3F00 + i*4 + j);
             }
             RENDER::convertNTSC2ARGB(&paletteARGB, &paletteByte, 1);
             SDL_SetRenderDrawColor(PPUrenderer, (paletteARGB >> 16) & 0xFF, (paletteARGB >> 8) & 0xFF, paletteARGB & 0xFF, 255);
@@ -374,14 +373,14 @@ void updatePPUWindow() {
 void updateAudio() {
     //Currently downsample using nearest neighbor method
     //TODO: Look into using FIR filter or similar
-    int size = APU::rawAudioBufferWriteIdx - rawAudioBufferReadIdx;
-    if(size < 0) size += APU::rawAudioBuffer.size();
+    int size = NES::rawAudio.writeIdx - NES::rawAudio.readIdx;
+    if(size < 0) size += NES::rawAudio.buffer.size();
 
-    float currentRawBufferIdx = rawAudioBufferReadIdx;
+    float currentRawBufferIdx = NES::rawAudio.readIdx;
     while(size > 0) {
-        audio_buffers[audio_wb_idx][audio_wb_pos] = (int16_t)((APU::rawAudioBuffer[(unsigned int)currentRawBufferIdx]*2.0f - 1.0f) * 0xFFF);
+        audio_buffers[audio_wb_idx][audio_wb_pos] = (int16_t)((NES::rawAudio.buffer[(unsigned int)currentRawBufferIdx]*2.0f - 1.0f) * 0xFFF);
         currentRawBufferIdx += rawSamplesPerSample;
-        if(currentRawBufferIdx >= APU::rawAudioBuffer.size()) currentRawBufferIdx -= (float)APU::rawAudioBuffer.size();
+        if(currentRawBufferIdx >= NES::rawAudio.buffer.size()) currentRawBufferIdx -= (float)NES::rawAudio.buffer.size();
         size -= rawSamplesPerSample;
         ++audio_wb_pos;
 
@@ -393,7 +392,7 @@ void updateAudio() {
             SDL_SemWait(audio_semaphore);
         }
     }
-    rawAudioBufferReadIdx = currentRawBufferIdx;
+    NES::rawAudio.readIdx = currentRawBufferIdx;
 }
 
 void fill_audio_buffer(void *user_data, uint8_t *out, int byte_count) {
@@ -413,8 +412,9 @@ void fill_audio_buffer(void *user_data, uint8_t *out, int byte_count) {
 
 void close()
 {
-    SDL_DestroyRenderer(mainrenderer);
-    SDL_DestroyRenderer(PPUrenderer);
+    SDL_DestroyWindow(mainwindow);
+    SDL_DestroyWindow(PPUwindow);
+    SDL_CloseAudioDevice(1);
     SDL_Quit();
     return;
 }

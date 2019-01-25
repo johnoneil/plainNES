@@ -641,11 +641,6 @@ std::array<std::array<uint8_t, 16*16*64>, 2> getPatternTableBuffers() //Used in 
 	return PTpixelmap;
 }
 
-uint8_t* getPixelMap()
-{
-	return pixelMap.data();
-}
-
 bool isframeReady() {
 	return frameReady;
 }
