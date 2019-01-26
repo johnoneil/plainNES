@@ -74,6 +74,8 @@ int main(int argc, char *argv[])
 	boost::chrono::nanoseconds avgFrameDuration_ns;
 
 	frameStart = boost::chrono::high_resolution_clock::now();
+
+	try{
 	while(GUI::quit == 0 && NES::running)
 	{
 		if(framenum >= avgWindow) {
@@ -88,6 +90,16 @@ int main(int argc, char *argv[])
 		GUI::update();
 		NES::frameStep();
 	}
+	}
+	catch(const std::out_of_range& oor)
+	{
+		std::cerr << "Out of Range error: " << oor.what() << std::endl;
+	}
+	catch(...)
+    {
+        std::exception_ptr p = std::current_exception();
+        std::cout <<(p ? p.__cxa_exception_type()->name() : "null") << std::endl;
+    }
 		
 	GUI::close();
 	return 0;

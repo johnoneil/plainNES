@@ -1,6 +1,6 @@
 # Compiler
 CC = g++
-OPTS = -Wall -g
+OPTS = -Wall -g -ggdb
 #-O3
 #-pg
 

@@ -1,62 +1,88 @@
 #include "mapper1.h"
 #include "ppu.h"
 #include "cpu.h"
+#include <iostream>
 
-Mapper1::Mapper1(GAMEPAK::iNES_Header header)
+//TODO: Add save ability for battery backed up PRG-RAM
+Mapper1::Mapper1(GAMEPAK::ROMInfo romInfo, std::ifstream &file)
 {
-    VRAM.resize(0x800);
-    PRGROM.resize(header.prgROM16cnt, std::vector<uint8_t>(0x4000, 0));
-	PRGRAM.resize(0x2000);
-    CHR.resize(32, std::vector<uint8_t>(0x1000, 0));
+	if(romInfo.iNESversion == 1) {
+		//Have to assume 8k PRG-RAM. Won't work with a few uncommon games that use bankable PRG-RAM
+		PRGRAM.resize(1, std::vector<uint8_t>(0x2000, 0));
+		PRGROM.resize(romInfo.PRGROMsize / 0x4000, std::vector<uint8_t>(0x4000, 0));
+		if(romInfo.CHRROMsize == 0) {
+			usingCHRRAM = true;
+			CHR.resize(2, std::vector<uint8_t>(0x1000, 0));
+		}
+		else {
+			usingCHRRAM = false;
+			CHR.resize(romInfo.CHRROMsize / 0x1000, std::vector<uint8_t>(0x1000, 0));
+		}
+		VRAM.resize(0x800);
+	}
+	else {
+		if(romInfo.batteryPresent && romInfo.PRGNVRAMsize > 0)
+			PRGRAM.resize(romInfo.PRGNVRAMsize / 0x2000, std::vector<uint8_t>(0x2000, 0));
+		else if(romInfo.PRGRAMsize > 0)
+			PRGRAM.resize(romInfo.PRGRAMsize / 0x2000, std::vector<uint8_t>(0x2000, 0));
+		
+		PRGROM.resize(romInfo.PRGROMsize / 0x4000, std::vector<uint8_t>(0x4000, 0));
+		if(romInfo.CHRROMsize == 0) {
+			usingCHRRAM = true;
+			CHR.resize(romInfo.CHRRAMsize / 0x1000, std::vector<uint8_t>(0x1000, 0));
+		}
+		else {
+			usingCHRRAM = false;
+			CHR.resize(romInfo.CHRROMsize / 0x1000, std::vector<uint8_t>(0x1000, 0));
+		}
+		VRAM.resize(0x800);
+	}
 
-	//Assumed power on states
-	mirroringMode = CHRbankmode = 0;
-	PRGbankmode = 3;
-	CHRbank0 = CHRbank1 = 0;
-	PRGbank = 0;
-	MMCshiftReg = 0;
-	writeCounter = 0;
+	loadData(file);
 }
 
 uint8_t Mapper1::memGet(uint16_t addr)
 {
     if(addr >= 0x6000 && addr < 0x8000) {
-		return PRGRAM[addr % 0x6000];
+		addr -= 0x6000;
+		if(PRGRAM.size() > 0)
+			CPU::busVal = PRGRAM.at(PRGRAMbank).at(addr);
 	}
 	else if(addr >= 0x8000 && addr < 0xC000) {
+		addr -= 0x8000;
 		if(PRGbankmode <= 1) {
-			return PRGROM[PRGbank & 0xE][addr % 0x8000];
+			CPU::busVal = PRGROM.at(PRGROMbank & 0xE).at(addr);
 		}
 		else if(PRGbankmode == 2) {
-			return PRGROM[0][addr % 0x8000];
+			CPU::busVal = PRGROM.at(0).at(addr % 0x8000);
 		}
 		else {
-			return PRGROM[PRGbank & 0xF][addr % 0x8000];
+			CPU::busVal = PRGROM.at(PRGROMbank & 0xF).at(addr);
 		}
 	}
 	else if(addr >= 0xC000) {
+		addr -= 0xC000;
 		if(PRGbankmode <= 1) {
-			return PRGROM[(PRGbank & 0xE) + 1][addr % 0xC000];
+			CPU::busVal = PRGROM.at((PRGROMbank & 0xE) + 1).at(addr);
 		}
 		else if(PRGbankmode == 2) {
-			return PRGROM[PRGbank & 0xF][addr % 0xC000];
+			CPU::busVal = PRGROM.at(PRGROMbank & 0xF).at(addr);
 		}
 		else {
-			return PRGROM.back()[addr % 0xC000];
+			CPU::busVal = PRGROM.back().at(addr);
 		}
 	}
-	else {
-		return CPU::busVal;
-	}
+	return CPU::busVal;
 }
 
 void Mapper1::memSet(uint16_t addr, uint8_t val)
 {
     if(addr >= 0x6000 && addr < 0x8000) {
-		PRGRAM[addr % 0x6000] = val;
+		addr -= 0x6000;
+		if(PRGRAM.size() > 0)
+			PRGRAM.at(PRGRAMbank).at(addr) = val;
 	}
     else if(addr >= 0x8000) {	//MMC control
-		
 		if((val >> 7) == 1) {	//Clear shift register
 			MMCshiftReg = 0;
 			writeCounter = 0;
@@ -78,7 +104,7 @@ void Mapper1::memSet(uint16_t addr, uint8_t val)
 						CHRbank1 = MMCshiftReg;
 						break;
 					case 3:
-						PRGbank = MMCshiftReg;
+						PRGROMbank = MMCshiftReg;
 						break;
 				}
 				MMCshiftReg = 0;
@@ -90,113 +116,139 @@ void Mapper1::memSet(uint16_t addr, uint8_t val)
 
 uint8_t Mapper1::PPUmemGet(uint16_t addr)
 {
+	try {
     //Mirror addresses higher than 0x3FFF
 	addr %= 0x4000;
 	if(addr < 0x1000) {
 		if(CHRbankmode == 0) {
-			return CHR[CHRbank0 & 0x1E][addr];
+			return CHR.at(CHRbank0 & 0x1E).at(addr);
 		}
 		else {
-			return CHR[CHRbank0][addr];
+			return CHR.at(CHRbank0).at(addr);
 		}
 	}
 	else if(addr < 0x2000) {
 		if(CHRbankmode == 0) {
-			return CHR[(CHRbank0 & 0x1E) + 1][addr % 0x1000];
+			return CHR.at((CHRbank0 & 0x1E) + 1).at(addr % 0x1000);
 		}
 		else {
-			return CHR[CHRbank1][addr % 0x1000];
+			return CHR.at(CHRbank1).at(addr % 0x1000);
 		}
 	}
 	else if(addr < 0x3F00) {
+		if(addr > 0x2FFF) addr -= 0x1000;
 		if(mirroringMode == 0) {
-			return VRAM[addr % 0x0400];
+			return VRAM.at(addr % 0x0400);
 		}
 		else if(mirroringMode == 1) {
-			return VRAM[(addr % 0x0400) + 0x400];
+			return VRAM.at((addr % 0x0400) + 0x400);
 		}
 		else if(mirroringMode == 2) {
 			if(addr < 0x2800)
-				return VRAM[addr - 0x2000];
+				return VRAM.at(addr - 0x2000);
 			else
-				return VRAM[addr - 0x2800];
+				return VRAM.at(addr - 0x2800);
 		}
 		else {
 			if(addr < 0x2800)
-				return VRAM[addr % 0x0400];
+				return VRAM.at(addr % 0x0400);
 			else
-				return VRAM[0x0400 + addr % 0x0400];
+				return VRAM.at(0x0400 + addr % 0x0400);
 		}
 	}
 	else if(addr < 0x4000) {
 		//Internal to PPU. Never mapped.
 		return PPU::getPalette((uint8_t)(addr % 0x20));
 	}
+	}
+	catch(const std::out_of_range err)
+	{
+		std::cerr << "Out of range error when trying to get addr: " << addr << std::endl;
+	}
     return 0;
 }
 
 void Mapper1::PPUmemSet(uint16_t addr, uint8_t val)
 {
+	try {
     //Mirror addresses higher than 0x3FFF
 	addr %= 0x4000;
 	if(addr < 0x1000) {
 		if(CHRbankmode == 0) {
-			CHR[CHRbank0 & 0x1E][addr] = val;
+			CHR.at(CHRbank0 & 0x1E).at(addr) = val;
 		}
 		else {
-			CHR[CHRbank0][addr] = val;
+			CHR.at(CHRbank0).at(addr) = val;
 		}
 	}
 	else if(addr < 0x2000) {
 		if(CHRbankmode == 0) {
-			CHR[(CHRbank0 & 0x1E) + 1][addr % 0x1000] = val;
+			CHR.at((CHRbank0 & 0x1E) + 1).at(addr % 0x1000) = val;
 		}
 		else {
-			CHR[CHRbank1][addr % 0x1000] = val;
+			CHR.at(CHRbank1).at(addr % 0x1000) = val;
 		}
 	}
 	else if(addr < 0x3F00) {
+		if(addr > 0x2FFF) addr -= 0x1000;
 		if(mirroringMode == 0) {
-			VRAM[addr % 0x0400] = val;
+			VRAM.at(addr % 0x0400) = val;
 		}
 		else if(mirroringMode == 1) {
-			VRAM[(addr % 0x0400) + 0x400] = val;
+			VRAM.at((addr % 0x0400) + 0x400) = val;
 		}
 		else if(mirroringMode == 2) {
 			if(addr < 0x2800)
-				VRAM[addr - 0x2000] = val;
+				VRAM.at(addr - 0x2000) = val;
 			else
-				VRAM[addr - 0x2800] = val;
+				VRAM.at(addr - 0x2800) = val;
 		}
 		else {
 			if(addr < 0x2800)
-				VRAM[addr % 0x0400] = val;
+				VRAM.at(addr % 0x0400) = val;
 			else
-				VRAM[0x0400 + addr % 0x0400] = val;
+				VRAM.at(0x0400 + addr % 0x0400) = val;
 		}
 	}
 	else if(addr < 0x4000) {
 		//Internal to PPU. Never mapped.
 		PPU::setPalette((uint8_t)(addr % 0x20), val);
 	}
+	}
+	catch(const std::out_of_range err)
+	{
+		std::cerr << "Out of range error when trying to set addr: " << addr << std::endl;
+	}
 }
 
-void Mapper1::loadData(GAMEPAK::iNES_Header header, std::ifstream &file)
+void Mapper1::loadData(std::ifstream &file)
 {
 	for(unsigned int bank=0; bank < PRGROM.size(); ++bank) {
 		for(unsigned int idx=0; idx < PRGROM[bank].size(); ++idx) {
 			if(file.eof())
-				break;
+				throw std::out_of_range("Reached EOF unexpectantly while loading ROM");
 			file.read((char*)&PRGROM[bank][idx],1);
 		}
 	}
 
-	for(unsigned int bank=0; bank < header.chrROM8cnt; ++bank) {
-		for(unsigned int idx=0; idx < CHR[bank].size(); ++idx) {
-			if(file.eof())
-				break;
-			file.read((char*)&CHR[bank][idx],1);
+	if(usingCHRRAM == false) {
+		for(unsigned int bank=0; bank < CHR.size(); ++bank) {
+			for(unsigned int idx=0; idx < CHR[bank].size(); ++idx) {
+				if(file.eof())
+					throw std::out_of_range("Reached EOF unexpectantly while loading ROM");
+				file.read((char*)&CHR[bank][idx],1);
+			}
 		}
 	}
+}
 
+void Mapper1::powerOn()
+{
+	//Assumed power on states
+	mirroringMode = CHRbankmode = 0;
+	PRGbankmode = 3;
+	CHRbank0 = CHRbank1 = 0;
+	PRGRAMbank = PRGROMbank = 0;
+	MMCshiftReg = 0;
+	writeCounter = 0;
 }

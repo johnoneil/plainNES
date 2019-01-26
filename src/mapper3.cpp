@@ -1,35 +1,33 @@
 #include "mapper3.h"
 #include "ppu.h"
 #include "cpu.h"
+#include "utils.h"
+#include <iostream>
 
-Mapper3::Mapper3(GAMEPAK::iNES_Header header)
+Mapper3::Mapper3(GAMEPAK::ROMInfo romInfo, std::ifstream &file)
 {
-	horzMirroring = header.mirroring;
-    VRAM.resize(0x800);
-    PRGROM.resize(header.prgROM16cnt * 0x4000);
-    CHR.resize(header.chrROM8cnt, std::vector<uint8_t>(0x2000, 0));
-	CHRbank = 0;
+	vertMirroring = romInfo.mirroringMode;
+	PRGROM.resize(romInfo.PRGROMsize);
+	if(romInfo.PRGROMsize > 0x8000)
+		std::cerr << "PRGROM larger than expected. Will ignore extra data" << std::endl;
+	CHRROM.resize(romInfo.CHRROMsize / 0x2000, std::vector<uint8_t>(0x2000, 0));
+    VRAM.resize(0x800); //Uses standard VRAM
+
+	loadData(file);
 }
 
 uint8_t Mapper3::memGet(uint16_t addr)
 {
-    //No PRGRAM
-    if(addr >= 0x6000 && addr < 0x8000) {
-		return CPU::busVal;
+	if(addr >= 0x8000) {
+		CPU::busVal = PRGROM.at((addr - 0x8000) % PRGROM.size());
 	}
-	else if(addr >= 0x8000) {
-		return PRGROM[(addr - 0x8000) % PRGROM.size()];
-	}
-	else {
-		return CPU::busVal;
-	}
+	return CPU::busVal;
 }
 
 void Mapper3::memSet(uint16_t addr, uint8_t val)
 {
-    //No PRG RAM. CHR bank select at 0x8000-0xFFFF
     if(addr >= 0x8000) {
-        CHRbank = val % CHR.size();
+        CHRbank = val % CHRROM.size();
     }
 }
 
@@ -39,21 +37,21 @@ uint8_t Mapper3::PPUmemGet(uint16_t addr)
 	addr %= 0x4000;
 	if(addr < 0x2000) {
         //Bankable CHR
-		return CHR[CHRbank][addr];
+		return CHRROM.at(CHRbank).at(addr);
 	}
 	else if(addr < 0x3F00) {
 		addr = 0x2000 + addr % 0x1000;
-		if(horzMirroring == 0) { //Horizontal mirroring
+		if(vertMirroring == 0) { //Horizontal mirroring
 			if(addr < 0x2800)
-				return VRAM[addr % 0x0400];
+				return VRAM.at(addr % 0x0400);
 			else
-				return VRAM[0x0400 + addr % 0x0400];
+				return VRAM.at(0x0400 + addr % 0x0400);
 		}
 		else {	//Vertical mirroring
 			if(addr < 0x2800)
-				return VRAM[addr - 0x2000];
+				return VRAM.at(addr - 0x2000);
 			else
-				return VRAM[addr - 0x2800];
+				return VRAM.at(addr - 0x2800);
 		}
 	}
 	else if(addr < 0x4000) {
@@ -69,21 +67,21 @@ void Mapper3::PPUmemSet(uint16_t addr, uint8_t val)
 	addr %= 0x4000;
 	if(addr < 0x2000) {
 		//CHRROM not writable
-		//CHR[CHRbank][addr] = val;
+		std::cerr << "Invalid write attempt to " << int_to_hex(addr) << std::endl;
 	}
 	else if(addr < 0x3F00) {
 		addr = 0x2000 + addr % 0x1000;
-		if(horzMirroring == 0) { //Horizontal mirroring
+		if(vertMirroring == 0) { //Horizontal mirroring
 			if(addr < 0x2800)
-				VRAM[addr % 0x0400] = val;
+				VRAM.at(addr % 0x0400) = val;
 			else
-				VRAM[0x0400 + addr % 0x0400] = val;
+				VRAM.at(0x0400 + addr % 0x0400) = val;
 		}
 		else {	//Vertical mirroring
 			if(addr < 0x2800)
-				VRAM[addr - 0x2000] = val;
+				VRAM.at(addr - 0x2000) = val;
 			else
-				VRAM[addr - 0x2800] = val;
+				VRAM.at(addr - 0x2800) = val;
 		}
 	}
 	else if(addr < 0x4000) {
@@ -92,19 +90,24 @@ void Mapper3::PPUmemSet(uint16_t addr, uint8_t val)
 	}
 }
 
-void Mapper3::loadData(GAMEPAK::iNES_Header header, std::ifstream &file)
+void Mapper3::loadData(std::ifstream &file)
 {
 	for(unsigned int idx=0; idx < PRGROM.size(); ++idx) {
 		if(file.eof())
-			break;
+			throw std::out_of_range("Reached EOF unexpectantly while loading ROM");
 		file.read((char*)&PRGROM[idx],1);
 	}
 
-	for(unsigned int bank=0; bank < header.chrROM8cnt; ++bank) {
-		for(unsigned int idx=0; idx < CHR[bank].size(); ++idx) {
+	for(unsigned int bank=0; bank < CHRROM.size(); ++bank) {
+		for(unsigned int idx=0; idx < CHRROM[bank].size(); ++idx) {
 			if(file.eof())
-				break;
-			file.read((char*)&CHR[bank][idx],1);
+				throw std::out_of_range("Reached EOF unexpectantly while loading ROM");
+			file.read((char*)&CHRROM[bank][idx],1);
 		}
 	}
+}
+
+void Mapper3::powerOn()
+{
+	CHRbank = 0;
 }
