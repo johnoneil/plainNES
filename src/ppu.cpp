@@ -478,10 +478,10 @@ void spriteEval()
 				else { //8x16 bit sprite
 					if((spriteL[i] & 0x80) > 0) yPos = 15 - yPos;
 					if((addr & 1) == 0) {
-						addr <<= 3;
+						addr <<= 4;
 					}
 					else {
-						addr = ((addr & 0xFE) << 3) + 0x1000;
+						addr = ((addr & 0xFE) << 4) + 0x1000;
 					}
 					if(yPos > 7) {
 						addr += 16;
