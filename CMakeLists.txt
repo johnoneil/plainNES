@@ -29,3 +29,8 @@ file(GLOB SOURCES "src/*.cpp")
 add_executable(plainNES ${SOURCES})
 
 target_link_libraries(plainNES mingw32 SDL2 SDL2main ${SDL2_TTF_LIBRARIES} ${Boost_LIBRARIES})
+
+#Copy over Resources folder into bin
+add_custom_command(TARGET plainNES POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_SOURCE_DIR}/Resources $<TARGET_FILE_DIR:plainNES>)
