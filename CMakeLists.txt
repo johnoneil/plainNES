@@ -40,6 +40,7 @@ target_sources(plainNES PRIVATE
                 src/Mapper/mapper.cpp
                 src/Mapper/mapper0.cpp
                 src/Mapper/mapper1.cpp
+                src/Mapper/mapper2.cpp
                 src/Mapper/mapper3.cpp
                )
 

@@ -3,6 +3,7 @@
 #include "cpu.h"
 #include "utils.h"
 #include <iostream>
+#include <algorithm>
 
 Mapper0::Mapper0(GAMEPAK::ROMInfo romInfo, std::ifstream &file)
 {
@@ -15,6 +16,10 @@ Mapper0::Mapper0(GAMEPAK::ROMInfo romInfo, std::ifstream &file)
 	if(romInfo.CHRROMsize == 0)
 		usingCHRRAM = true;
     VRAM.resize(0x800); //Uses standard VRAM
+	
+	std::fill(PRGRAM.begin(), PRGRAM.end(), 0);
+	std::fill(CHR.begin(), CHR.end(), 0);
+	std::fill(VRAM.begin(), VRAM.end(), 0);
 
 	loadData(file);
 }

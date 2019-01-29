@@ -3,6 +3,7 @@
 #include "Mapper/mapper.h"
 #include "Mapper/mapper0.h"
 #include "Mapper/mapper1.h"
+#include "Mapper/mapper2.h"
 #include "Mapper/mapper3.h"
 #include <stdio.h>
 #include <iostream>
@@ -148,6 +149,7 @@ int loadROM(std::ifstream &file) {
 	switch(mapperNum) {
 		case 0: mapper = new Mapper0(romInfo, file); break;
 		case 1: mapper = new Mapper1(romInfo, file); break;
+		case 2: mapper = new Mapper2(romInfo, file); break;
 		case 3: mapper = new Mapper3(romInfo, file); break;
 		default:
 			std::cerr << "Unsupported mapper: " << (int)mapperNum << std::endl;

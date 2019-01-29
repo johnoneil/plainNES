@@ -1,46 +1,59 @@
-#include "mapper3.h"
+#include "mapper2.h"
 #include "ppu.h"
 #include "cpu.h"
 #include "utils.h"
 #include <iostream>
 #include <algorithm>
 
-Mapper3::Mapper3(GAMEPAK::ROMInfo romInfo, std::ifstream &file)
+Mapper2::Mapper2(GAMEPAK::ROMInfo romInfo, std::ifstream &file)
 {
 	vertMirroring = romInfo.mirroringMode;
-	PRGROM.resize(romInfo.PRGROMsize);
-	if(romInfo.PRGROMsize > 0x8000)
-		std::cerr << "PRGROM larger than expected. Will ignore extra data" << std::endl;
-	CHRROM.resize(romInfo.CHRROMsize / 0x2000, std::vector<uint8_t>(0x2000, 0));
+
+    PRGROM.resize(romInfo.PRGROMsize / 0x4000, std::vector<uint8_t>(0x4000, 0));
+    if(romInfo.CHRROMsize > 0) {
+        usingCHRRAM = false;
+        CHR.resize(romInfo.CHRROMsize);
+    }
+    else {
+        usingCHRRAM = true;
+        CHR.resize(0x2000);
+    }
+	
     VRAM.resize(0x800); //Uses standard VRAM
 
+    std::fill(CHR.begin(), CHR.end(), 0);
 	std::fill(VRAM.begin(), VRAM.end(), 0);
 
 	loadData(file);
+
+    PRGROMbank = 0;
 }
 
-uint8_t Mapper3::memGet(uint16_t addr)
+uint8_t Mapper2::memGet(uint16_t addr)
 {
-	if(addr >= 0x8000) {
-		CPU::busVal = PRGROM.at((addr - 0x8000) % PRGROM.size());
+	if(addr >= 0x8000 && addr < 0xC000) {
+		CPU::busVal = PRGROM.at(PRGROMbank).at((addr - 0x8000) % 0x4000);
 	}
+    else if(addr >= 0xC000) {
+        CPU::busVal = PRGROM.back().at((addr - 0xC000) % 0x4000);
+    }
 	return CPU::busVal;
 }
 
-void Mapper3::memSet(uint16_t addr, uint8_t val)
+void Mapper2::memSet(uint16_t addr, uint8_t val)
 {
     if(addr >= 0x8000) {
-        CHRbank = val % CHRROM.size();
+        PRGROMbank = val % PRGROM.size();
     }
 }
 
-uint8_t Mapper3::PPUmemGet(uint16_t addr)
+uint8_t Mapper2::PPUmemGet(uint16_t addr)
 {
     //Mirror addresses higher than 0x3FFF
 	addr %= 0x4000;
 	if(addr < 0x2000) {
         //Bankable CHR
-		return CHRROM.at(CHRbank).at(addr);
+		return CHR.at(addr);
 	}
 	else if(addr < 0x3F00) {
 		addr = 0x2000 + addr % 0x1000;
@@ -64,13 +77,12 @@ uint8_t Mapper3::PPUmemGet(uint16_t addr)
     return 0;
 }
 
-void Mapper3::PPUmemSet(uint16_t addr, uint8_t val)
+void Mapper2::PPUmemSet(uint16_t addr, uint8_t val)
 {
     //Mirror addresses higher than 0x3FFF
 	addr %= 0x4000;
 	if(addr < 0x2000) {
-		//CHRROM not writable
-		std::cerr << "Invalid write attempt to " << int_to_hex(addr) << std::endl;
+		CHR.at(addr) = val;
 	}
 	else if(addr < 0x3F00) {
 		addr = 0x2000 + addr % 0x1000;
@@ -93,24 +105,26 @@ void Mapper3::PPUmemSet(uint16_t addr, uint8_t val)
 	}
 }
 
-void Mapper3::loadData(std::ifstream &file)
+void Mapper2::loadData(std::ifstream &file)
 {
-	for(unsigned int idx=0; idx < PRGROM.size(); ++idx) {
-		if(file.eof())
-			throw std::out_of_range("Reached EOF unexpectantly while loading ROM");
-		file.read((char*)&PRGROM[idx],1);
-	}
-
-	for(unsigned int bank=0; bank < CHRROM.size(); ++bank) {
-		for(unsigned int idx=0; idx < CHRROM[bank].size(); ++idx) {
+	for(unsigned int bank=0; bank < PRGROM.size(); ++bank) {
+		for(unsigned int idx=0; idx < PRGROM[bank].size(); ++idx) {
 			if(file.eof())
 				throw std::out_of_range("Reached EOF unexpectantly while loading ROM");
-			file.read((char*)&CHRROM[bank][idx],1);
+			file.read((char*)&PRGROM[bank][idx],1);
+		}
+	}
+
+	if(usingCHRRAM == false) {
+		for(unsigned int idx=0; idx < CHR.size(); ++idx) {
+			if(file.eof())
+				throw std::out_of_range("Reached EOF unexpectantly while loading ROM");
+			file.read((char*)&CHR[idx],1);
 		}
 	}
 }
 
-void Mapper3::powerOn()
+void Mapper2::powerOn()
 {
-	CHRbank = 0;
+	PRGROMbank = 0;
 }

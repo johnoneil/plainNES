@@ -2,6 +2,7 @@
 #include "ppu.h"
 #include "cpu.h"
 #include <iostream>
+#include <algorithm>
 
 //TODO: Add save ability for battery backed up PRG-RAM
 Mapper1::Mapper1(GAMEPAK::ROMInfo romInfo, std::ifstream &file)
@@ -37,6 +38,8 @@ Mapper1::Mapper1(GAMEPAK::ROMInfo romInfo, std::ifstream &file)
 		}
 		VRAM.resize(0x800);
 	}
+
+	std::fill(VRAM.begin(), VRAM.end(), 0);
 
 	loadData(file);
 }
