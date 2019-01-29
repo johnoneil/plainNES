@@ -1,9 +1,9 @@
 #include "gamepak.h"
 #include "PPU.h"
-#include "mapper.h"
-#include "mapper0.h"
-#include "mapper1.h"
-#include "mapper3.h"
+#include "Mapper/mapper.h"
+#include "Mapper/mapper0.h"
+#include "Mapper/mapper1.h"
+#include "Mapper/mapper3.h"
 #include <stdio.h>
 #include <iostream>
 #include <string.h>

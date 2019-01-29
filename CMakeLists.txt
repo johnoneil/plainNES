@@ -23,10 +23,25 @@ include_directories(${SDL2_TTF_INCLUDE_DIRS})
 #Use bin folder for output
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-include_directories(src)
-file(GLOB SOURCES "src/*.cpp")
+add_executable(plainNES "")
 
-add_executable(plainNES ${SOURCES})
+target_include_directories(plainNES PRIVATE src)
+target_sources(plainNES PRIVATE
+                src/apu.cpp
+                src/cpu.cpp
+                src/gamepak.cpp
+                src/gui.cpp
+                src/io.cpp
+                src/main.cpp
+                src/nes.cpp
+                src/ppu.cpp
+                src/render.cpp
+                src/utils.cpp
+                src/Mapper/mapper.cpp
+                src/Mapper/mapper0.cpp
+                src/Mapper/mapper1.cpp
+                src/Mapper/mapper3.cpp
+               )
 
 target_link_libraries(plainNES mingw32 SDL2 SDL2main ${SDL2_TTF_LIBRARIES} ${Boost_LIBRARIES})
 
