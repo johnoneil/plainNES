@@ -143,7 +143,7 @@ void step()
 	++ppuClock;
 }
 
-uint8_t regGet(uint16_t addr)
+uint8_t regGet(uint16_t addr, bool peek)
 {
 	addr = 0x2000 + (addr % 8);
 	switch(addr) {
@@ -158,10 +158,14 @@ uint8_t regGet(uint16_t addr)
 		case 0x2002: //PPUSTATUS
 			{
 			uint8_t status = (vblank << 7) | (spr0hit << 6) | (sprOverflow << 5);
-			vblank = 0;
-			writeToggle = 0;
-			ioBus = (ioBus & 0x1F) | status;
-			return ioBus;
+			if(peek == false) {
+				vblank = 0;
+				writeToggle = 0;
+				ioBus = (ioBus & 0x1F) | status;
+				return ioBus;
+			}
+			else
+				return (ioBus & 0x1F) | status;
 			}
 			break;
 			
@@ -171,7 +175,8 @@ uint8_t regGet(uint16_t addr)
 			break;
 
 		case 0x2004: //OAMDATA
-			ioBus = oam_data[OAMaddr];
+			if(peek) return oam_data.at(OAMaddr);
+			ioBus = oam_data.at(OAMaddr);
 			return ioBus;
 			break;
 
@@ -194,15 +199,20 @@ uint8_t regGet(uint16_t addr)
 			//Can directly access palette since never mapped
 			if((currVRAM_addr.value % 0x4000) >= 0x3F00) {	//Palette read
 				data = getPalette(currVRAM_addr.value % 0x20);
-				VRAM_buffer = GAMEPAK::PPUmemGet(currVRAM_addr.value - 0x1000);
+				if(peek == false) VRAM_buffer = GAMEPAK::PPUmemGet(currVRAM_addr.value - 0x1000);
 			}
 			else {
 				data = VRAM_buffer;
-				VRAM_buffer = GAMEPAK::PPUmemGet(currVRAM_addr.value);
+				if(peek == false) VRAM_buffer = GAMEPAK::PPUmemGet(currVRAM_addr.value);
 			}
-			if(incrementMode == 0) ++currVRAM_addr.value;
-			else currVRAM_addr.value += 32;
-			ioBus = data;
+			if(peek == false) {
+				if(incrementMode == 0) ++currVRAM_addr.value;
+				else currVRAM_addr.value += 32;
+				ioBus = data;
+			}
+			else
+				return data;
+				
 			return ioBus;
 			}
 			break;

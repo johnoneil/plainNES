@@ -44,37 +44,40 @@ Mapper1::Mapper1(GAMEPAK::ROMInfo romInfo, std::ifstream &file)
 	loadData(file);
 }
 
-uint8_t Mapper1::memGet(uint16_t addr)
+uint8_t Mapper1::memGet(uint16_t addr, bool peek)
 {
+	uint8_t returnedValue = CPU::busVal;
     if(addr >= 0x6000 && addr < 0x8000) {
 		addr -= 0x6000;
 		if(PRGRAM.size() > 0)
-			CPU::busVal = PRGRAM.at(PRGRAMbank).at(addr);
+			returnedValue = PRGRAM.at(PRGRAMbank).at(addr);
 	}
 	else if(addr >= 0x8000 && addr < 0xC000) {
 		addr -= 0x8000;
 		if(PRGbankmode <= 1) {
-			CPU::busVal = PRGROM.at(PRGROMbank & 0xE).at(addr);
+			returnedValue = PRGROM.at(PRGROMbank & 0xE).at(addr);
 		}
 		else if(PRGbankmode == 2) {
-			CPU::busVal = PRGROM.at(0).at(addr % 0x8000);
+			returnedValue = PRGROM.at(0).at(addr % 0x8000);
 		}
 		else {
-			CPU::busVal = PRGROM.at(PRGROMbank & 0xF).at(addr);
+			returnedValue = PRGROM.at(PRGROMbank & 0xF).at(addr);
 		}
 	}
 	else if(addr >= 0xC000) {
 		addr -= 0xC000;
 		if(PRGbankmode <= 1) {
-			CPU::busVal = PRGROM.at((PRGROMbank & 0xE) + 1).at(addr);
+			returnedValue = PRGROM.at((PRGROMbank & 0xE) + 1).at(addr);
 		}
 		else if(PRGbankmode == 2) {
-			CPU::busVal = PRGROM.at(PRGROMbank & 0xF).at(addr);
+			returnedValue = PRGROM.at(PRGROMbank & 0xF).at(addr);
 		}
 		else {
-			CPU::busVal = PRGROM.back().at(addr);
+			returnedValue = PRGROM.back().at(addr);
 		}
 	}
+	if(peek) return returnedValue;
+	CPU::busVal = returnedValue;
 	return CPU::busVal;
 }
 
@@ -117,7 +120,7 @@ void Mapper1::memSet(uint16_t addr, uint8_t val)
 	}
 }
 
-uint8_t Mapper1::PPUmemGet(uint16_t addr)
+uint8_t Mapper1::PPUmemGet(uint16_t addr, bool peek)
 {
 	try {
     //Mirror addresses higher than 0x3FFF

@@ -175,17 +175,17 @@ void step()
 	mapper->step();
 }
 
-uint8_t CPUmemGet(uint16_t addr) {
-	return mapper->memGet(addr);
+uint8_t CPUmemGet(uint16_t addr, bool peek) {
+	return mapper->memGet(addr, peek);
 }
 
 void CPUmemSet(uint16_t addr, uint8_t val) {
 	mapper->memSet(addr, val);
 }
 
-uint8_t PPUmemGet(uint16_t addr)
+uint8_t PPUmemGet(uint16_t addr, bool peek)
 {
-	return mapper->PPUmemGet(addr);
+	return mapper->PPUmemGet(addr, peek);
 }
 
 void PPUmemSet(uint16_t addr, uint8_t val)

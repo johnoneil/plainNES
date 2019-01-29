@@ -29,14 +29,17 @@ Mapper2::Mapper2(GAMEPAK::ROMInfo romInfo, std::ifstream &file)
     PRGROMbank = 0;
 }
 
-uint8_t Mapper2::memGet(uint16_t addr)
+uint8_t Mapper2::memGet(uint16_t addr, bool peek)
 {
+	uint8_t returnedValue = CPU::busVal;
 	if(addr >= 0x8000 && addr < 0xC000) {
-		CPU::busVal = PRGROM.at(PRGROMbank).at((addr - 0x8000) % 0x4000);
+		returnedValue = PRGROM.at(PRGROMbank).at((addr - 0x8000) % 0x4000);
 	}
     else if(addr >= 0xC000) {
-        CPU::busVal = PRGROM.back().at((addr - 0xC000) % 0x4000);
+        returnedValue = PRGROM.back().at((addr - 0xC000) % 0x4000);
     }
+	if(peek) return returnedValue;
+	CPU::busVal = returnedValue;
 	return CPU::busVal;
 }
 
@@ -47,7 +50,7 @@ void Mapper2::memSet(uint16_t addr, uint8_t val)
     }
 }
 
-uint8_t Mapper2::PPUmemGet(uint16_t addr)
+uint8_t Mapper2::PPUmemGet(uint16_t addr, bool peek)
 {
     //Mirror addresses higher than 0x3FFF
 	addr %= 0x4000;

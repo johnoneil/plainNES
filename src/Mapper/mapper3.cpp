@@ -19,11 +19,14 @@ Mapper3::Mapper3(GAMEPAK::ROMInfo romInfo, std::ifstream &file)
 	loadData(file);
 }
 
-uint8_t Mapper3::memGet(uint16_t addr)
+uint8_t Mapper3::memGet(uint16_t addr, bool peek)
 {
+	uint8_t returnedValue = CPU::busVal;
 	if(addr >= 0x8000) {
-		CPU::busVal = PRGROM.at((addr - 0x8000) % PRGROM.size());
+		returnedValue = PRGROM.at((addr - 0x8000) % PRGROM.size());
 	}
+	if(peek) return returnedValue;
+	CPU::busVal = returnedValue;
 	return CPU::busVal;
 }
 
@@ -34,7 +37,7 @@ void Mapper3::memSet(uint16_t addr, uint8_t val)
     }
 }
 
-uint8_t Mapper3::PPUmemGet(uint16_t addr)
+uint8_t Mapper3::PPUmemGet(uint16_t addr, bool peek)
 {
     //Mirror addresses higher than 0x3FFF
 	addr %= 0x4000;

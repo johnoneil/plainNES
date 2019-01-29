@@ -22,25 +22,28 @@ Mapper4::Mapper4(GAMEPAK::ROMInfo romInfo, std::ifstream &file)
 	loadData(file);
 }
 
-uint8_t Mapper4::memGet(uint16_t addr)
+uint8_t Mapper4::memGet(uint16_t addr, bool peek)
 {
+    uint8_t returnedValue = CPU::busVal;
     if(addr >= 0x6000 && addr < 0x8000) {
-        CPU::busVal = PRGRAM.at((addr - 0x6000) % 0x2000);
+        returnedValue = PRGRAM.at((addr - 0x6000) % 0x2000);
     }
     else if(addr >= 0x8000 && addr < 0xA000) {
-        if(PRGbankmode == 0) CPU::busVal = PRGROM.at(R6).at((addr - 0x8000) % 0x2000);
-        else CPU::busVal = PRGROM.end()[-2].at((addr - 0x8000) % 0x2000);
+        if(PRGbankmode == 0) returnedValue = PRGROM.at(R6).at((addr - 0x8000) % 0x2000);
+        else returnedValue = PRGROM.end()[-2].at((addr - 0x8000) % 0x2000);
     }
     else if(addr >= 0xA000 && addr < 0xC000) {
-        CPU::busVal = PRGROM.at(R7).at((addr - 0xA000) % 0x2000);
+        returnedValue = PRGROM.at(R7).at((addr - 0xA000) % 0x2000);
     }
     else if(addr >= 0xC000 && addr < 0xE000) {
-        if(PRGbankmode == 0) CPU::busVal = PRGROM.end()[-2].at((addr - 0xC000) % 0x2000);
-        else CPU::busVal = PRGROM.at(R6).at((addr - 0xC000) % 0x2000);
+        if(PRGbankmode == 0) returnedValue = PRGROM.end()[-2].at((addr - 0xC000) % 0x2000);
+        else returnedValue = PRGROM.at(R6).at((addr - 0xC000) % 0x2000);
     }
     else if(addr >= 0xE000) {
-        CPU::busVal = PRGROM.end()[-1].at((addr - 0xE000) % 0x2000);
+        returnedValue = PRGROM.end()[-1].at((addr - 0xE000) % 0x2000);
     }
+	if(peek) return returnedValue;
+	CPU::busVal = returnedValue;
 	return CPU::busVal;
 }
 
@@ -91,8 +94,9 @@ void Mapper4::memSet(uint16_t addr, uint8_t val)
     }
 }
 
-uint8_t Mapper4::PPUmemGet(uint16_t addr)
+uint8_t Mapper4::PPUmemGet(uint16_t addr, bool peek)
 {
+    currPPUAddr = addr;
 	try {
     //Mirror addresses higher than 0x3FFF
 	addr %= 0x4000;
@@ -260,9 +264,10 @@ void Mapper4::powerOn()
 
 void Mapper4::step()
 {
-    uint8_t A12now = ((PPU::getAddr() & 0x1000) > 0) ? 1 : 0;
+    uint8_t A12now = ((currPPUAddr & 0x1000) > 0) ? 1 : 0;
     if(A12low && A12now > 0) {
         //Rising edge of A12
+        std::cout << "Clock: " << PPU::scanline << ":" << PPU::dot << std::endl;
         A12low = false;
         if(M2cntr >= 2) {
             M2cntr = 0;

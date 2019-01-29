@@ -22,7 +22,7 @@ void reset();
 void step();
 void tick();
 
-uint8_t memGet(uint16_t addr);
+uint8_t memGet(uint16_t addr, bool peek = false);
 void memSet(uint16_t addr, uint8_t val);
 
 void OAMDMA_write();

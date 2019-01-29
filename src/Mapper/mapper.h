@@ -9,14 +9,14 @@ class Mapper {
     //0x4020-0x5FFF often empty (open bus behavior)
     //0x6000-0x7FFF normally PRGRAM
     //0x8000-0xFFFF normally PRGROM
-    virtual uint8_t memGet(uint16_t addr);
+    virtual uint8_t memGet(uint16_t addr, bool peek = false);
     virtual void memSet(uint16_t addr, uint8_t val);
 
     //Memory access functions for PPU mappable memory banks
     //0x0000-0x1FFF: Pattern tables (CHRROM/CHRRAM)
     //0x2000-0x3EFF: Nametables (VRAM) - often just the internal 2kb RAM (0x800 bytes) mirrored
     //0x3F00-0x4000: PPU palette. Never mappable, so use PPU get/set functions
-    virtual uint8_t PPUmemGet(uint16_t addr);
+    virtual uint8_t PPUmemGet(uint16_t addr, bool peek = false);
     virtual void PPUmemSet(uint16_t addr, uint8_t val);
 
     //Load rom file into memory

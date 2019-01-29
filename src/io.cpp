@@ -18,7 +18,7 @@ void init()
     controllerStrobe = false;
 }
 
-uint8_t regGet(uint16_t addr)
+uint8_t regGet(uint16_t addr, bool peek)
 {
     uint8_t val = 0;
     if(addr == 0x4016) {
@@ -27,7 +27,7 @@ uint8_t regGet(uint16_t addr)
         }
         else {
             val = controller_shiftR[0] & 1;
-            controller_shiftR[0] >>= 1;
+            if(peek == false) controller_shiftR[0] >>= 1;
         }
     }
     else if(addr == 0x4017) {
@@ -36,7 +36,7 @@ uint8_t regGet(uint16_t addr)
         }
         else {
             val = controller_shiftR[1] & 1;
-            controller_shiftR[1] >>= 1;
+            if(peek == false) controller_shiftR[1] >>= 1;
         }
     }
     else {

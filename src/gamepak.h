@@ -69,9 +69,9 @@ void powerOn();
 void reset();
 void step();
 
-uint8_t CPUmemGet(uint16_t addr);
+uint8_t CPUmemGet(uint16_t addr, bool peek = false);
 void CPUmemSet(uint16_t addr, uint8_t val);
-uint8_t PPUmemGet(uint16_t addr);
+uint8_t PPUmemGet(uint16_t addr, bool peek = false);
 void PPUmemSet(uint16_t addr, uint8_t val);
 
 

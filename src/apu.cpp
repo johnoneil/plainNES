@@ -479,7 +479,7 @@ void clockLinearCounter() {
         triangle_linearCntrReload = false;
 }
 
-uint8_t regGet(uint16_t addr)
+uint8_t regGet(uint16_t addr, bool peek)
 {   
     if(addr == 0x4015) {
         statusReg.LCpulse1 = ((pulse1_lenCntr>0) ? 1 : 0);
@@ -490,7 +490,7 @@ uint8_t regGet(uint16_t addr)
         statusReg.frameIRQ = ((frameInterruptRequest) ? 1 : 0);
         statusReg.dmcIRQ = ((DMCinterruptRequest) ? 1 : 0);
         statusReg.openBus = CPU::busVal >> 5;
-        frameInterruptRequest = false;
+        if(peek == false) frameInterruptRequest = false;
         return statusReg.value;
     }
     return CPU::busVal; //Open bus behavior
