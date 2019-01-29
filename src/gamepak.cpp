@@ -5,6 +5,7 @@
 #include "Mapper/mapper1.h"
 #include "Mapper/mapper2.h"
 #include "Mapper/mapper3.h"
+#include "Mapper/mapper4.h"
 #include <stdio.h>
 #include <iostream>
 #include <string.h>
@@ -151,6 +152,7 @@ int loadROM(std::ifstream &file) {
 		case 1: mapper = new Mapper1(romInfo, file); break;
 		case 2: mapper = new Mapper2(romInfo, file); break;
 		case 3: mapper = new Mapper3(romInfo, file); break;
+		case 4: mapper = new Mapper4(romInfo, file); break;
 		default:
 			std::cerr << "Unsupported mapper: " << (int)mapperNum << std::endl;
 			return 1;
@@ -166,6 +168,11 @@ void powerOn() {
 void reset()
 {
 	mapper->reset();
+}
+
+void step()
+{
+	mapper->step();
 }
 
 uint8_t CPUmemGet(uint16_t addr) {

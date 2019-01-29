@@ -25,5 +25,8 @@ class Mapper {
     //Handles mapper behavior at powerOn or reset
     virtual void powerOn();
     virtual void reset();
+
+    //For mappers operating off of the clock
+    virtual void step();
 };
 

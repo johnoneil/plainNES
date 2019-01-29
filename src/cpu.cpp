@@ -161,6 +161,7 @@ void tick() {
 	PPU::step();
 	PPU::step();
 	APU::step();
+	GAMEPAK::step();
 }
 
 void step() {

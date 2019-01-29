@@ -649,5 +649,10 @@ void setframeReady(bool set) {
 	frameReady = set;
 }
 
+uint16_t getAddr()
+{
+	return currVRAM_addr.value;
+}
+
 
 }

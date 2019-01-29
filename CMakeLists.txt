@@ -42,6 +42,7 @@ target_sources(plainNES PRIVATE
                 src/Mapper/mapper1.cpp
                 src/Mapper/mapper2.cpp
                 src/Mapper/mapper3.cpp
+                src/Mapper/mapper4.cpp
                )
 
 target_link_libraries(plainNES mingw32 SDL2 SDL2main ${SDL2_TTF_LIBRARIES} ${Boost_LIBRARIES})
