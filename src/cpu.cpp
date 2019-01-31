@@ -101,7 +101,7 @@ uint8_t memGet(uint16_t addr, bool peek) {
 		returnedValue = GAMEPAK::CPUmemGet(addr, peek);	//Gamepak memory
 	}
 
-	if(peek = false) busVal = returnedValue;
+	if(peek == false) busVal = returnedValue;
 	return returnedValue;
 }
 
