@@ -35,5 +35,6 @@ class Mapper4 : public Mapper {
 
     void powerOn() override;
 
-    void step() override;
+    void CPUstep() override;
+    void PPUstep() override;
 };

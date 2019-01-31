@@ -170,9 +170,14 @@ void reset()
 	mapper->reset();
 }
 
-void step()
+void CPUstep()
 {
-	mapper->step();
+	mapper->CPUstep();
+}
+
+void PPUstep()
+{
+	mapper->PPUstep();
 }
 
 uint8_t CPUmemGet(uint16_t addr, bool peek) {

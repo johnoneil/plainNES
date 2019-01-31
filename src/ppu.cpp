@@ -39,11 +39,13 @@ uint8_t fineXscroll;	//x in nesdev wiki
 bool writeToggle;		//w in nesdev wiki
 uint16_t BGtiledata_upper, BGtiledata_lower;
 uint8_t BGattri_upper, BGattri_lower;
+uint16_t addressBus;
 
 //Background latches and shift registers
 uint8_t NTlatch, ATlatch, BGLlatch, BGHlatch;
 uint16_t ATshiftL, ATshiftH;
 uint16_t BGshiftL, BGshiftH;
+uint16_t sprAddr;
 
 //Sprite memory, latches, shift registers, and counters
 std::array<uint8_t, 256> oam_data;
@@ -293,6 +295,7 @@ void regSet(uint16_t addr, uint8_t val)
 				//tempVRAM_addr = (tempVRAM_addr & 0xFF00) | val;
 				writeToggle = false;
 				currVRAM_addr.value = tempVRAM_addr.value;
+				addressBus = currVRAM_addr.value;
 			}
 			break;
 
@@ -462,45 +465,53 @@ void spriteEval()
 			}
 			}
 			break;
-		case 257:
+		case 257 ... 320:
 			//Fetch sprite data
-			spr0onLine = spr0onNextLine;
-			for(int i = 0; i<8; ++i) {
-				uint8_t yPos = scanline - oam_sec[i*4];
-				uint16_t addr = oam_sec[i*4 + 1];
-				spriteL[i] = oam_sec[i*4 + 2];
-				spriteCounter[i] = oam_sec[i*4 + 3];
-				
-				//Check if sprite out of range on y axis. If so, use transparent sprite
-				if(oam_sec[i*4] >= 239) { 
-					sprite_shiftL[i] = 0;
-					sprite_shiftH[i] = 0;
-					continue;
-				}
+			//PPU fetches of sprite tile data should be cycle accurate for MMC3 behavior
+			if(dot == 257) {
+				spr0onLine = spr0onNextLine;
+			}
+			if((dot - 257) % 8 == 0) { //For now, fetch secOAM info on first step
+				int sprNum = (dot - 257) / 8;
+				uint8_t yPos = scanline - oam_sec[sprNum*4];
+				sprAddr = oam_sec[sprNum*4 + 1];
+				spriteL[sprNum] = oam_sec[sprNum*4 + 2];
+				spriteCounter[sprNum] = oam_sec[sprNum*4 + 3];
+
 				if(spriteSize == 0) { //8x8 bit sprite
 					//Check if flipped vertically
-					if((spriteL[i] & 0x80) > 0) yPos = 7 - yPos;
-					addr = (addr << 4) + yPos;
-					if(spriteTileSel) addr += 0x1000;
-					sprite_shiftL[i] = GAMEPAK::PPUmemGet(addr);
-					sprite_shiftH[i] = GAMEPAK::PPUmemGet(addr + 8);
+					if((spriteL[sprNum] & 0x80) > 0) yPos = 7 - yPos;
+					sprAddr = (sprAddr << 4) + yPos;
+					if(spriteTileSel) sprAddr += 0x1000;
 				}
 				else { //8x16 bit sprite
-					if((spriteL[i] & 0x80) > 0) yPos = 15 - yPos;
-					if((addr & 1) == 0) {
-						addr <<= 4;
+					if((spriteL[sprNum] & 0x80) > 0) yPos = 15 - yPos;
+					if((sprAddr & 1) == 0) {
+						sprAddr <<= 4;
 					}
 					else {
-						addr = ((addr & 0xFE) << 4) + 0x1000;
+						sprAddr = ((sprAddr & 0xFE) << 4) + 0x1000;
 					}
 					if(yPos > 7) {
-						addr += 16;
+						sprAddr += 16;
 						yPos -= 8;
 					}
-					addr += yPos;
-					sprite_shiftL[i] = GAMEPAK::PPUmemGet(addr);
-					sprite_shiftH[i] = GAMEPAK::PPUmemGet(addr + 8);
+					sprAddr += yPos;
 				}
+			}
+			else if((dot - 257) % 8 == 4) { //Sprite tile low fetch
+				int sprNum = (dot - 257) / 8;
+				sprite_shiftL[sprNum] = GAMEPAK::PPUmemGet(sprAddr);
+				//If y-axis out of range, set sprite transparent
+				if(oam_sec[sprNum*4] >= 239)
+					sprite_shiftL[sprNum] = 0;
+			}
+			else if((dot - 257) % 8 == 6) { //Sprite tile high fetch
+				int sprNum = (dot - 257) / 8;
+				sprite_shiftH[sprNum] = GAMEPAK::PPUmemGet(sprAddr + 8);
+				//If y-axis out of range, set sprite transparent
+				if(oam_sec[sprNum*4] >= 239)
+					sprite_shiftH[sprNum] = 0;
 			}
 			break;
 	}
@@ -628,8 +639,8 @@ std::array<std::array<uint8_t, 16*16*64>, 2> getPatternTableBuffers() //Used in 
 	for(int pixelRow=0; pixelRow<16*8; ++pixelRow) {
 		for(int tileCol=0; tileCol<16; ++tileCol) {
 			addr = ((pixelRow/8) << 8) | (tileCol << 4) | (pixelRow % 8);
-			tilerowL = GAMEPAK::PPUmemGet(addr);
-			tilerowH = GAMEPAK::PPUmemGet(addr+8);
+			tilerowL = GAMEPAK::PPUmemGet(addr, true);
+			tilerowH = GAMEPAK::PPUmemGet(addr+8, true);
 			for(int pixelCol=0; pixelCol<8; ++pixelCol) {
 				//uint8_t value = (((tilerowH >> (7-pixelCol))&1) << 1) | ((tilerowL >> (7-pixelCol))&1);
 				uint8_t value = palette[(((tilerowH >> (7-pixelCol))&1) << 1) | ((tilerowL >> (7-pixelCol))&1)];
@@ -640,8 +651,8 @@ std::array<std::array<uint8_t, 16*16*64>, 2> getPatternTableBuffers() //Used in 
 	for(int pixelRow=0; pixelRow<16*8; ++pixelRow) {
 		for(int tileCol=0; tileCol<16; ++tileCol) {
 			addr = (((pixelRow/8) << 8) | (tileCol << 4) | (pixelRow % 8)) + 0x1000;
-			tilerowL = GAMEPAK::PPUmemGet(addr);
-			tilerowH = GAMEPAK::PPUmemGet(addr+8);
+			tilerowL = GAMEPAK::PPUmemGet(addr, true);
+			tilerowH = GAMEPAK::PPUmemGet(addr+8, true);
 			for(int pixelCol=0; pixelCol<8; ++pixelCol) {
 				uint8_t value = palette[(((tilerowH >> (7-pixelCol))&1) << 1) | ((tilerowL >> (7-pixelCol))&1)];
 				PTpixelmap[1][pixelRow*16*8+tileCol*8+pixelCol] = value;
@@ -657,11 +668,6 @@ bool isframeReady() {
 
 void setframeReady(bool set) {
 	frameReady = set;
-}
-
-uint16_t getAddr()
-{
-	return currVRAM_addr.value;
 }
 
 

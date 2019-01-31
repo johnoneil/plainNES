@@ -162,10 +162,13 @@ void reset() {
 void tick() {
 	++cpuCycle;
 	PPU::step();
+	GAMEPAK::PPUstep();
 	PPU::step();
+	GAMEPAK::PPUstep();
 	PPU::step();
+	GAMEPAK::PPUstep();
 	APU::step();
-	GAMEPAK::step();
+	GAMEPAK::CPUstep();
 }
 
 void step() {

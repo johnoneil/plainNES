@@ -26,7 +26,8 @@ class Mapper {
     virtual void powerOn();
     virtual void reset();
 
-    //For mappers operating off of the clock
-    virtual void step();
+    //For mappers which react to clock signals or other systems
+    virtual void CPUstep(); //Occurs every CPU step
+    virtual void PPUstep(); //Occurs every PPU step
 };
 

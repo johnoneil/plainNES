@@ -8,6 +8,7 @@ namespace PPU {
 extern unsigned int scanline;
 extern unsigned int dot; //Dots are also called cycles and can be considered the pixel column
 extern std::array<uint8_t, 240*256> pixelMap;
+extern uint16_t addressBus;
 
 void powerOn();
 void reset();
@@ -27,6 +28,5 @@ uint8_t* getPixelMap();
 std::array<std::array<uint8_t, 16*16*64>, 2> getPatternTableBuffers();
 bool isframeReady();
 void setframeReady(bool set);
-uint16_t getAddr();
 
 }

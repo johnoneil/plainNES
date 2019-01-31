@@ -67,7 +67,8 @@ struct ROMInfo {
 int loadROM(std::ifstream &file);
 void powerOn();
 void reset();
-void step();
+void CPUstep();
+void PPUstep();
 
 uint8_t CPUmemGet(uint16_t addr, bool peek = false);
 void CPUmemSet(uint16_t addr, uint8_t val);

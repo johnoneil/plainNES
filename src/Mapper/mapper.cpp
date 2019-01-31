@@ -8,4 +8,5 @@ void Mapper::PPUmemSet(uint16_t addr, uint8_t val) {};
 void Mapper::loadData(std::ifstream &file) {};
 void Mapper::powerOn() {};
 void Mapper::reset() {};
-void Mapper::step() {};
+void Mapper::CPUstep() {};
+void Mapper::PPUstep() {};

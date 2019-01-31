@@ -96,7 +96,7 @@ void Mapper4::memSet(uint16_t addr, uint8_t val)
 
 uint8_t Mapper4::PPUmemGet(uint16_t addr, bool peek)
 {
-    currPPUAddr = addr;
+    PPU::addressBus = addr;
 	try {
     //Mirror addresses higher than 0x3FFF
 	addr %= 0x4000;
@@ -168,6 +168,7 @@ void Mapper4::PPUmemSet(uint16_t addr, uint8_t val)
 	addr %= 0x4000;
 
     //Can't write to CHRROM
+    
 	/*if(addr < 0x0400) {
         if(CHRbankmode) CHRROM.at(R2).at(addr % 0x400) = val;
         else CHRROM.at(R0).at(addr % 0x400) = val;
@@ -262,9 +263,15 @@ void Mapper4::powerOn()
     IRQlatch = 0;
 }
 
-void Mapper4::step()
+void Mapper4::CPUstep()
 {
-    uint8_t A12now = ((currPPUAddr & 0x1000) > 0) ? 1 : 0;
+    //M2 rises and falls every CPU cycle
+    ++M2cntr;
+}
+
+void Mapper4::PPUstep()
+{
+    uint8_t A12now = ((PPU::addressBus & 0x1000) > 0) ? 1 : 0;
     if(A12low && A12now > 0) {
         //Rising edge of A12
         std::cout << "Clock: " << PPU::scanline << ":" << PPU::dot << std::endl;
@@ -284,7 +291,6 @@ void Mapper4::step()
         }
     }
     else if(A12now == 0) {
-        ++M2cntr;
         A12low = true;
     }
     if(IRQrequested) CPU::triggerIRQ();
