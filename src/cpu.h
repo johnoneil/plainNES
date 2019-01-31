@@ -27,9 +27,9 @@ void memSet(uint16_t addr, uint8_t val);
 
 void OAMDMA_write();
 void pollInterrupts();
-void triggerNMI();
-void triggerIRQ();
-void unsetIRQ();
+void interruptDetect();
+void setNMI(bool setLow);
+void setIRQ(bool setLow);
 void setPC(uint16_t newPC);
 
 void logStep();

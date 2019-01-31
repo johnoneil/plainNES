@@ -12,8 +12,20 @@
 
 namespace CPU {
 
-bool NMI_request, IRQ_request, NMI_triggered, IRQ_triggered, interruptOccured;
 unsigned long long cpuCycle;
+
+//Interupts (NMI and IRQ) go through 3 steps when triggering the CPU
+//Step 1: A device pulls the NMI or IRQ line low (simulated with setNMI() and setIRQ())
+//Step 2: During phi2 of each CPU cycle, the status of these lines is detected (simulated with interruptDetect())
+//		  If interrupt detected on lines, the internal NMI or IRQ detected signal is triggered during the following phi1
+//		  NMI detects falling edge. IRQ detects low level
+//		  For NMI, this detected signal stays active until cleared. For IRQ, it remains active for only that cycle
+//Step 3: The NMI/IRQ detected signals are polled during certain points, usually the last cycle of each operation
+//		  If a signal is detected, the next operation issued is the interrupt sequence (similar to BRK)
+bool NMI_line_low, NMI_line_went_low, IRQ_line_low;
+bool NMI_detected, IRQ_detected;
+bool NMI_triggered, IRQ_triggered, interruptOccured;
+
 
 struct StatusReg {
 	union {
@@ -61,6 +73,9 @@ struct OpInfo {
 	uint8_t addrH;
 	uint16_t actAddr;
 	uint8_t val;
+	unsigned long long CPUcycle;
+	int PPU_dot;
+	int PPU_SL;
 } opInfo;
 
 std::array<uint8_t, 2048> RAM;
@@ -108,7 +123,6 @@ uint8_t memGet(uint16_t addr, bool peek) {
 void memSet(uint16_t addr, uint8_t val) {
 	//Logic for setting 8bit value at address
 	//Handles mirroring, or which component to send data to
-	
 	if(addr < 0x2000) {			//CPU memory space or mirrored
 		RAM[addr % 0x800] = val;
 	}
@@ -145,8 +159,8 @@ void powerOn() {
 	reg.P.value = 0;
 	reg.P.I = 1;
 	reg.PC = memGet(0xFFFC) | memGet(0xFFFD) << 8;
-	NMI_request = NMI_triggered = false;
-	IRQ_request = IRQ_triggered = false;
+	NMI_line_went_low = NMI_triggered = false;
+	IRQ_line_low = IRQ_triggered = false;
 	interruptOccured = false;
 	cpuCycle = 0;
 	RAM.fill(0);
@@ -169,9 +183,14 @@ void tick() {
 	GAMEPAK::PPUstep();
 	APU::step();
 	GAMEPAK::CPUstep();
+	interruptDetect();
 }
 
 void step() {
+	//TEST
+	if(reg.PC == 0xE60C) {
+		reg.PC = 0xE60C;
+	}
 	uint8_t opcode;
 	if(NMI_triggered | IRQ_triggered) {
 		interruptOccured = true;
@@ -188,10 +207,14 @@ void step() {
 			opInfo.lastRegs.SP = reg.SP;
 			opInfo.lastRegs.P.value = reg.P.value;
 			opInfo.opCode = opcode;
+			opInfo.CPUcycle = cpuCycle;
+			opInfo.PPU_dot = PPU::dot;
+			opInfo.PPU_SL = PPU::scanline;
 		}
 		++reg.PC;
 		tick();
 	}
+	if(NES::logging) opInfo.addrMode = AddressingMode::IMPLICIT;
 	switch (opcode) {
 		case 0x69:
 			if(NES::logging) opInfo.opName = "ADC";
@@ -307,17 +330,26 @@ void step() {
 			opAXS(Immediate());
 			break;
 		case 0x90:
-			if(NES::logging) opInfo.opName = "BCC";
+			if(NES::logging) {
+				opInfo.opName = "BCC";
+				opInfo.addrMode = AddressingMode::RELATIVE;
+			}
 			memGet(reg.PC); //Dummy read of PC
 			opBCC();
 			break;
 		case 0xB0:
-			if(NES::logging) opInfo.opName = "BCS";
+			if(NES::logging) {
+				opInfo.opName = "BCS";
+				opInfo.addrMode = AddressingMode::RELATIVE;
+			}
 			memGet(reg.PC); //Dummy read of PC
 			opBCS();
 			break;
 		case 0xF0:
-			if(NES::logging) opInfo.opName = "BEQ";
+			if(NES::logging) {
+				opInfo.opName = "BEQ";
+				opInfo.addrMode = AddressingMode::RELATIVE;
+			}
 			memGet(reg.PC); //Dummy read of PC
 			opBEQ();
 			break;
@@ -330,17 +362,26 @@ void step() {
 			opBIT(Absolute());
 			break;
 		case 0x30:
-			if(NES::logging) opInfo.opName = "BMI";
+			if(NES::logging) {
+				opInfo.opName = "BMI";
+				opInfo.addrMode = AddressingMode::RELATIVE;
+			}
 			memGet(reg.PC); //Dummy read of PC
 			opBMI();
 			break;
 		case 0xD0:
-			if(NES::logging) opInfo.opName = "BNE";
+			if(NES::logging) {
+				opInfo.opName = "BNE";
+				opInfo.addrMode = AddressingMode::RELATIVE;
+			}
 			memGet(reg.PC); //Dummy read of PC
 			opBNE();
 			break;
 		case 0x10:
-			if(NES::logging) opInfo.opName = "BPL";
+			if(NES::logging) {
+				opInfo.opName = "BPL";
+				opInfo.addrMode = AddressingMode::RELATIVE;
+			}
 			memGet(reg.PC); //Dummy read of PC
 			opBPL();
 			break;	
@@ -350,12 +391,18 @@ void step() {
 			opBRK();
 			break;
 		case 0x50:
-			if(NES::logging) opInfo.opName = "BVC";
+			if(NES::logging) {
+				opInfo.opName = "BVC";
+				opInfo.addrMode = AddressingMode::RELATIVE;
+			}
 			memGet(reg.PC); //Dummy read of PC
 			opBVC();
 			break;
 		case 0x70:
-			if(NES::logging) opInfo.opName = "BVS";
+			if(NES::logging) {
+				opInfo.opName = "BVS";
+				opInfo.addrMode = AddressingMode::RELATIVE;
+			}
 			memGet(reg.PC); //Dummy read of PC
 			opBVS();
 			break;
@@ -1134,12 +1181,41 @@ void step() {
 }
 
 void pollInterrupts() {
-	if(NMI_request)
+	if(NMI_detected) {
 		NMI_triggered = true;
-	else if(IRQ_request && reg.P.I == 0)
+		if(NES::logging) logInterrupt("[NMI triggered]");
+	}
+	else if(IRQ_detected && reg.P.I == 0) {
 		IRQ_triggered = true;
+		if(NES::logging) logInterrupt("[IRQ triggered]");
+	}
 }
 
+void interruptDetect()
+{
+	if(NMI_line_went_low) {
+		NMI_detected = true;
+		NMI_line_went_low = false;
+		if(NES::logging) logInterrupt("[NMI line low detected]");
+	}
+	if(IRQ_line_low)
+		IRQ_detected = true;
+	else
+		IRQ_detected = false;
+
+}
+
+void setNMI(bool setLow) {
+	if(NMI_line_low == false && setLow) {
+		NMI_line_went_low = true;
+		if(NES::logging) logInterrupt("[NMI line low]");
+	}
+	NMI_line_low = setLow;
+}
+
+void setIRQ(bool setLow) {
+	IRQ_line_low = setLow;
+}
 
 void OAMDMA_write() {
 	//dummy read cpuCycle
@@ -1153,18 +1229,6 @@ void OAMDMA_write() {
 		PPU::regSet(0x2004,memGet((((uint16_t)OAMDMA)<<8)|((uint8_t)i)));
 		tick();
 	}
-}
-
-void triggerNMI() {
-	NMI_request = true;
-}
-
-void triggerIRQ() {
-	IRQ_request = true;
-}
-
-void unsetIRQ() {
-	IRQ_request = false;
 }
 
 void setPC(uint16_t newPC) {
@@ -1258,8 +1322,9 @@ void logStep()
 		<< " Y:" << std::setw(2) << static_cast<int>(opInfo.lastRegs.Y)
 		<< " P:" << std::setw(2) << static_cast<int>(opInfo.lastRegs.P.value)
 		<< " SP:" << std::setw(2) << static_cast<int>(opInfo.lastRegs.SP)
-		<< " CYC:" << std::dec << std::setfill(' ') << std::setw(3) << PPU::dot
-		<< " SL:" << std::setw(3) << PPU::scanline << std::endl;
+		<< " CYC:" << std::dec << std::setfill(' ') << std::setw(3) << opInfo.PPU_dot
+		<< " SL:" << std::setw(3) << opInfo.PPU_SL
+		<< " CPUCyc:" << (long long)opInfo.CPUcycle << std::endl;
 }
 
 void logInterrupt(std::string txt)
@@ -1578,7 +1643,7 @@ void opAXS(uint16_t addr) {
 
 void opBCC() {
 	int8_t delta = static_cast<int8_t>(memGet(reg.PC));
-	if(NES::logging) opInfo.val = delta;
+	if(NES::logging) opInfo.addrL = delta;
 	++reg.PC;
 	tick();
 	if(reg.P.C == 0) {
@@ -1593,7 +1658,7 @@ void opBCC() {
 
 void opBCS() {
 	int8_t delta = static_cast<int8_t>(memGet(reg.PC));
-	if(NES::logging) opInfo.val = delta;
+	if(NES::logging) opInfo.addrL = delta;
 	++reg.PC;
 	tick();
 	if(reg.P.C) {
@@ -1608,7 +1673,7 @@ void opBCS() {
 
 void opBEQ() {
 	int8_t delta = static_cast<int8_t>(memGet(reg.PC));
-	if(NES::logging) opInfo.val = delta;
+	if(NES::logging) opInfo.addrL = delta;
 	++reg.PC;
 	tick();
 	if(reg.P.Z) {
@@ -1622,18 +1687,18 @@ void opBEQ() {
 }
 
 void opBIT(uint16_t addr) {
-	tick();
 	pollInterrupts();
 	uint8_t M = memGet(addr);
 	if(NES::logging) opInfo.val = M;
 	reg.P.Z = (reg.A & M) == 0;
 	reg.P.N = (M & 1<<7) != 0;
 	reg.P.V = (M & 1<<6) != 0;
+	tick();
 }
 
 void opBMI() {
 	int8_t delta = static_cast<int8_t>(memGet(reg.PC));
-	if(NES::logging) opInfo.val = delta;
+	if(NES::logging) opInfo.addrL = delta;
 	++reg.PC;
 	tick();
 	if(reg.P.N) {
@@ -1648,7 +1713,7 @@ void opBMI() {
 
 void opBNE() {
 	int8_t delta = static_cast<int8_t>(memGet(reg.PC));
-	if(NES::logging) opInfo.val = delta;
+	if(NES::logging) opInfo.addrL = delta;
 	++reg.PC;
 	tick();
 	if(reg.P.Z == 0) {
@@ -1663,7 +1728,7 @@ void opBNE() {
 
 void opBPL() {
 	int8_t delta = static_cast<int8_t>(memGet(reg.PC));
-	if(NES::logging) opInfo.val = delta;
+	if(NES::logging) opInfo.addrL = delta;
 	++reg.PC;
 	tick();
 	if(reg.P.N == 0) {
@@ -1694,17 +1759,19 @@ void opBRK() {
 
 	uint16_t newaddr;
 	//Will catch interrupts here
-	if(NMI_triggered || NMI_request) {
+	if(NMI_triggered || NMI_detected) {
+		interruptOccured = true;
 		newaddr = 0xFFFA;
 		reg.P.B = 2;
-		NMI_request = NMI_triggered = false;
-		if(NES::logging) logInterrupt("[NMI Interrupt]");
+		if(NES::logging && !NMI_triggered) logInterrupt("[NMI Interrupt during BRK]");
+		NMI_detected = NMI_triggered = false;
 	}
-	else if(IRQ_triggered || IRQ_request) {
+	else if(IRQ_triggered || IRQ_detected) {
+		interruptOccured = true;
 		newaddr = 0xFFFE;
 		reg.P.B = 2;
-		IRQ_triggered = false;
-		if(NES::logging) logInterrupt("[IRQ Interrupt]");
+		if(NES::logging && !IRQ_triggered) logInterrupt("[IRQ Interrupt during BRK]");
+		IRQ_detected = IRQ_triggered = false;
 	}
 	else {
 		newaddr = 0xFFFE;
@@ -1721,12 +1788,12 @@ void opBRK() {
 	addr |= memGet(newaddr+1) << 8;
 	reg.PC = addr;
 	tick();
-	pollInterrupts();
+	if(interruptOccured == false) pollInterrupts();
 }
 
 void opBVC()  {
 	int8_t delta = static_cast<int8_t>(memGet(reg.PC));
-	if(NES::logging) opInfo.val = delta;
+	if(NES::logging) opInfo.addrL = delta;
 	++reg.PC;
 	tick();
 	if(reg.P.V == 0) {
@@ -1741,7 +1808,7 @@ void opBVC()  {
 
 void opBVS() {
 	int8_t delta = static_cast<int8_t>(memGet(reg.PC));
-	if(NES::logging) opInfo.val = delta;
+	if(NES::logging) opInfo.addrL = delta;
 	++reg.PC;
 	tick();
 	if(reg.P.V) {
@@ -1994,37 +2061,37 @@ void opLDA() {
 	reg.A = memGet(reg.PC);
 	if(NES::logging) opInfo.val = reg.A;
 	++reg.PC;
-	tick();
 	reg.P.Z = (reg.A == 0);
 	reg.P.N = (reg.A >> 7) > 0;
+	tick();
 }
 
 void opLDA(uint16_t addr) {
+	pollInterrupts();
 	reg.A = memGet(addr);
 	if(NES::logging) opInfo.val = reg.A;
-	tick();
 	reg.P.Z = (reg.A == 0);
 	reg.P.N = (reg.A >> 7) > 0;
-	pollInterrupts();
+	tick();
 }
 
 void opLDX() {
+	pollInterrupts();
 	reg.X = memGet(reg.PC);
 	if(NES::logging) opInfo.val = reg.X;
 	++reg.PC;
-	tick();
 	reg.P.Z = (reg.X == 0);
 	reg.P.N = (reg.X >> 7) > 0;
-	pollInterrupts();
+	tick();
 }
 
 void opLDX(uint16_t addr) {
+	pollInterrupts();
 	reg.X = memGet(addr);
 	if(NES::logging) opInfo.val = reg.X;
-	tick();
 	reg.P.Z = (reg.X == 0);
 	reg.P.N = (reg.X >> 7) > 0;
-	pollInterrupts();
+	tick();
 }
 
 void opLDY() {
@@ -2032,18 +2099,18 @@ void opLDY() {
 	reg.Y = memGet(reg.PC);
 	if(NES::logging) opInfo.val = reg.Y;
 	++reg.PC;
-	tick();
 	reg.P.Z = (reg.Y == 0);
 	reg.P.N = (reg.Y >> 7) > 0;
+	tick();
 }
 
 void opLDY(uint16_t addr) {
+	pollInterrupts();
 	reg.Y = memGet(addr);
 	if(NES::logging) opInfo.val = reg.Y;
-	tick();
 	reg.P.Z = (reg.Y == 0);
 	reg.P.N = (reg.Y >> 7) > 0;
-	pollInterrupts();
+	tick();
 }
 
 void opLSR() {
@@ -2340,21 +2407,21 @@ void opSRE(uint16_t addr) {
 }
 
 void opSTA(uint16_t addr) {
+	pollInterrupts();
 	memSet(addr, reg.A);
 	tick();
-	pollInterrupts();
 }
 
 void opSTX(uint16_t addr) {
+	pollInterrupts();
 	memSet(addr, reg.X);
 	tick();
-	pollInterrupts();
 }
 
 void opSTY(uint16_t addr) {
+	pollInterrupts();
 	memSet(addr, reg.Y);
 	tick();
-	pollInterrupts();
 }
 
 void opTAS(uint16_t addr) {

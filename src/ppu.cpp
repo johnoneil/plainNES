@@ -72,6 +72,7 @@ bool rendering;
 
 //PPUSTATUS
 bool sprOverflow, spr0hit, vblank;
+unsigned long long PPUSTATUS_read_on_cycle = 0;
 
 //OAMADDR
 uint8_t OAMaddr;
@@ -117,12 +118,26 @@ void step()
 		dot++;
 
 	if(scanline == 241 && dot == 1) {
-		vblank = true;
-		if(NMIenable)
-			CPU::triggerNMI();
+		//Check if PPUSTATUS read within a clock cycle of now
+		if(PPUSTATUS_read_on_cycle == ppuClock) {
+			//Do nothing
+		}
+		else {
+			vblank = true;
+			if(NMIenable)
+				CPU::setNMI(true);
+		}
 	}
+	/*else if(scanline == 241 && dot == 2 ) {
+		//If PPUSTATUS read on same clock cycle or one later than vblank, unset flags
+		if(PPUSTATUS_read_on_cycle >= (ppuClock - 1)) {
+			vblank = false;
+			CPU::setNMI(false);
+		}
+	}*/
 	else if(scanline == 261 && dot == 1) {
 		vblank = spr0hit = sprOverflow = false;
+		CPU::setNMI(false);
 	}
 
 	if(scanline <= 239 || scanline == 261) {
@@ -161,7 +176,9 @@ uint8_t regGet(uint16_t addr, bool peek)
 			{
 			uint8_t status = (vblank << 7) | (spr0hit << 6) | (sprOverflow << 5);
 			if(peek == false) {
+				PPUSTATUS_read_on_cycle = ppuClock;
 				vblank = 0;
+				CPU::setNMI(false);
 				writeToggle = 0;
 				ioBus = (ioBus & 0x1F) | status;
 				return ioBus;
@@ -233,7 +250,9 @@ void regSet(uint16_t addr, uint8_t val)
 		case 0x2000: //PPUCTRL
 			NMIenable = (val >> 7) > 0;
 			if(NMIenable && vblank)
-				CPU::triggerNMI();
+				CPU::setNMI(true);
+			else
+				CPU::setNMI(false);
 			spriteSize = (val & 0x20) > 0;
 			backgroundTileSel = (val & 0x10) > 0;
 			spriteTileSel = (val & 0x08) > 0;

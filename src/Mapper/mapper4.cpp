@@ -293,5 +293,5 @@ void Mapper4::PPUstep()
     else if(A12now == 0) {
         A12low = true;
     }
-    if(IRQrequested) CPU::triggerIRQ();
+    if(IRQrequested) CPU::setIRQ(true);
 }
