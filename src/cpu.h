@@ -20,7 +20,9 @@ extern unsigned long long cpuCycle;
 void powerOn();
 void reset();
 void step();
-void tick();
+void incCycle();
+uint8_t cpuRead(uint16_t addr);
+void cpuWrite(uint16_t addr, uint8_t val);
 
 uint8_t memGet(uint16_t addr, bool peek = false);
 void memSet(uint16_t addr, uint8_t val);
@@ -29,6 +31,7 @@ void OAMDMA_write();
 void pollInterrupts();
 void interruptDetect();
 void setNMI(bool setLow);
+void forceNMI(bool setLow);
 void setIRQ(bool setLow);
 void setPC(uint16_t newPC);
 
@@ -65,6 +68,7 @@ void opBMI();
 void opBNE();
 void opBPL();
 void opBRK();
+void opBRKonIRQ();
 void opBVC();
 void opBVS();
 void opCLC();

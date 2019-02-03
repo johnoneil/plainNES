@@ -24,7 +24,7 @@ unsigned long long cpuCycle;
 //		  If a signal is detected, the next operation issued is the interrupt sequence (similar to BRK)
 bool NMI_line_low, NMI_line_went_low, IRQ_line_low;
 bool NMI_detected, IRQ_detected;
-bool NMI_triggered, IRQ_triggered, interruptOccured;
+bool NMI_triggered, IRQ_triggered;
 
 
 struct StatusReg {
@@ -76,6 +76,7 @@ struct OpInfo {
 	unsigned long long CPUcycle;
 	int PPU_dot;
 	int PPU_SL;
+	std::string interrupts;
 } opInfo;
 
 std::array<uint8_t, 2048> RAM;
@@ -161,7 +162,6 @@ void powerOn() {
 	reg.PC = memGet(0xFFFC) | memGet(0xFFFD) << 8;
 	NMI_line_went_low = NMI_triggered = false;
 	IRQ_line_low = IRQ_triggered = false;
-	interruptOccured = false;
 	cpuCycle = 0;
 	RAM.fill(0);
 }
@@ -173,8 +173,9 @@ void reset() {
 	reg.PC = memGet(0xFFFC) | memGet(0xFFFD) << 8;
 }
 
-void tick() {
+void incCycle() {
 	++cpuCycle;
+	interruptDetect();
 	PPU::step();
 	GAMEPAK::PPUstep();
 	PPU::step();
@@ -183,22 +184,28 @@ void tick() {
 	GAMEPAK::PPUstep();
 	APU::step();
 	GAMEPAK::CPUstep();
-	interruptDetect();
+}
+
+uint8_t cpuRead(uint16_t addr)
+{
+	uint8_t value = memGet(addr);
+	incCycle();
+	return value;
+}
+
+void cpuWrite(uint16_t addr, uint8_t val)
+{
+	memSet(addr, val);
+	incCycle();
 }
 
 void step() {
-	//TEST
-	if(reg.PC == 0xE60C) {
-		reg.PC = 0xE60C;
-	}
 	uint8_t opcode;
 	if(NMI_triggered | IRQ_triggered) {
-		interruptOccured = true;
-		opcode = 0x00; //BRK
-		tick();
+		opBRKonIRQ();
+		return;
 	}
 	else {
-		opcode = memGet(reg.PC);
 		if(NES::logging) {
 			opInfo.lastRegs.PC = reg.PC;
 			opInfo.lastRegs.A = reg.A;
@@ -206,13 +213,16 @@ void step() {
 			opInfo.lastRegs.Y = reg.Y;
 			opInfo.lastRegs.SP = reg.SP;
 			opInfo.lastRegs.P.value = reg.P.value;
-			opInfo.opCode = opcode;
 			opInfo.CPUcycle = cpuCycle;
 			opInfo.PPU_dot = PPU::dot;
 			opInfo.PPU_SL = PPU::scanline;
 		}
+		opcode = cpuRead(reg.PC);
 		++reg.PC;
-		tick();
+
+		if(NES::logging) {
+			opInfo.opCode = opcode;
+		}
 	}
 	if(NES::logging) opInfo.addrMode = AddressingMode::IMPLICIT;
 	switch (opcode) {
@@ -306,7 +316,6 @@ void step() {
 			break;
 		case 0x0A:
 			if(NES::logging) opInfo.opName = "ASL";
-			memGet(reg.PC); //Dummy read of PC
 			opASL();
 			break;
 		case 0x06:
@@ -334,7 +343,6 @@ void step() {
 				opInfo.opName = "BCC";
 				opInfo.addrMode = AddressingMode::RELATIVE;
 			}
-			memGet(reg.PC); //Dummy read of PC
 			opBCC();
 			break;
 		case 0xB0:
@@ -342,7 +350,6 @@ void step() {
 				opInfo.opName = "BCS";
 				opInfo.addrMode = AddressingMode::RELATIVE;
 			}
-			memGet(reg.PC); //Dummy read of PC
 			opBCS();
 			break;
 		case 0xF0:
@@ -350,7 +357,6 @@ void step() {
 				opInfo.opName = "BEQ";
 				opInfo.addrMode = AddressingMode::RELATIVE;
 			}
-			memGet(reg.PC); //Dummy read of PC
 			opBEQ();
 			break;
 		case 0x24:
@@ -366,7 +372,6 @@ void step() {
 				opInfo.opName = "BMI";
 				opInfo.addrMode = AddressingMode::RELATIVE;
 			}
-			memGet(reg.PC); //Dummy read of PC
 			opBMI();
 			break;
 		case 0xD0:
@@ -374,7 +379,6 @@ void step() {
 				opInfo.opName = "BNE";
 				opInfo.addrMode = AddressingMode::RELATIVE;
 			}
-			memGet(reg.PC); //Dummy read of PC
 			opBNE();
 			break;
 		case 0x10:
@@ -382,12 +386,10 @@ void step() {
 				opInfo.opName = "BPL";
 				opInfo.addrMode = AddressingMode::RELATIVE;
 			}
-			memGet(reg.PC); //Dummy read of PC
 			opBPL();
 			break;	
 		case 0x00:
 			if(NES::logging) opInfo.opName = "BRK";
-			memGet(reg.PC); //Dummy read of PC
 			opBRK();
 			break;
 		case 0x50:
@@ -395,7 +397,6 @@ void step() {
 				opInfo.opName = "BVC";
 				opInfo.addrMode = AddressingMode::RELATIVE;
 			}
-			memGet(reg.PC); //Dummy read of PC
 			opBVC();
 			break;
 		case 0x70:
@@ -403,27 +404,22 @@ void step() {
 				opInfo.opName = "BVS";
 				opInfo.addrMode = AddressingMode::RELATIVE;
 			}
-			memGet(reg.PC); //Dummy read of PC
 			opBVS();
 			break;
 		case 0x18:
 			if(NES::logging) opInfo.opName = "CLC";
-			memGet(reg.PC); //Dummy read of PC
 			opCLC();
 			break;
 		case 0xD8:
 			if(NES::logging) opInfo.opName = "CLD";
-			memGet(reg.PC); //Dummy read of PC
 			opCLD();
 			break;
 		case 0x58:
 			if(NES::logging) opInfo.opName = "CLI";
-			memGet(reg.PC); //Dummy read of PC
 			opCLI();
 			break;
 		case 0xB8:
 			if(NES::logging) opInfo.opName = "CLV";
-			memGet(reg.PC); //Dummy read of PC
 			opCLV();
 			break;
 		case 0xC9:
@@ -528,12 +524,10 @@ void step() {
 			break;
 		case 0xCA:
 			if(NES::logging) opInfo.opName = "DEX";
-			memGet(reg.PC); //Dummy read of PC
 			opDEX();
 			break;
 		case 0x88:
 			if(NES::logging) opInfo.opName = "DEY";
-			memGet(reg.PC); //Dummy read of PC
 			opDEY();
 			break;
 		case 0x49:
@@ -586,12 +580,10 @@ void step() {
 			break;
 		case 0xE8:
 			if(NES::logging) opInfo.opName = "INX";
-			memGet(reg.PC); //Dummy read of PC
 			opINX();
 			break;
 		case 0xC8:
 			if(NES::logging) opInfo.opName = "INY";
-			memGet(reg.PC); //Dummy read of PC
 			opINY();
 			break;
 		case 0xE3:
@@ -629,8 +621,6 @@ void step() {
 		case 0x6C:
 			if(NES::logging) opInfo.opName = "JMP";
 			opJMP(Indirect());
-			tick();
-			tick();
 			break;
 		case 0x20:
 			if(NES::logging) opInfo.opName = "JSR";
@@ -747,7 +737,6 @@ void step() {
 			break;
 		case 0x4A:
 			if(NES::logging) opInfo.opName = "LSR";
-			memGet(reg.PC); //Dummy read of PC
 			opLSR();
 			break;
 		case 0x46:
@@ -824,22 +813,18 @@ void step() {
 			break;
 		case 0x48:
 			if(NES::logging) opInfo.opName = "PHA";
-			memGet(reg.PC); //Dummy read of PC
 			opPHA();
 			break;
 		case 0x08:
 			if(NES::logging) opInfo.opName = "PHP";
-			memGet(reg.PC); //Dummy read of PC
 			opPHP();
 			break;
 		case 0x68:
 			if(NES::logging) opInfo.opName = "PLA";
-			memGet(reg.PC); //Dummy read of PC
 			opPLA();
 			break;
 		case 0x28:
 			if(NES::logging) opInfo.opName = "PLP";
-			memGet(reg.PC); //Dummy read of PC
 			opPLP();
 			break;
 		case 0x23:
@@ -872,7 +857,6 @@ void step() {
 			break;
 		case 0x2A:
 			if(NES::logging) opInfo.opName = "ROL";
-			memGet(reg.PC); //Dummy read of PC
 			opROL();
 			break;
 		case 0x26:
@@ -893,7 +877,6 @@ void step() {
 			break;
 		case 0x6A:
 			if(NES::logging) opInfo.opName = "ROR";
-			memGet(reg.PC); //Dummy read of PC
 			opROR();
 			break;
 		case 0x66:
@@ -942,12 +925,10 @@ void step() {
 			break;	
 		case 0x40:
 			if(NES::logging) opInfo.opName = "RTI";
-			memGet(reg.PC); //Dummy read of PC
 			opRTI();
 			break;
 		case 0x60:
 			if(NES::logging) opInfo.opName = "RTS";
-			memGet(reg.PC); //Dummy read of PC
 			opRTS();
 			break;
 		case 0x83:
@@ -1004,17 +985,14 @@ void step() {
 			break;
 		case 0x38:
 			if(NES::logging) opInfo.opName = "SEC";
-			memGet(reg.PC); //Dummy read of PC
 			opSEC();
 			break;
 		case 0xF8:
 			if(NES::logging) opInfo.opName = "SED";
-			memGet(reg.PC); //Dummy read of PC
 			opSED();
 			break;
 		case 0x78:
 			if(NES::logging) opInfo.opName = "SEI";
-			memGet(reg.PC); //Dummy read of PC
 			opSEI();
 			break;
 		case 0x9E:
@@ -1139,32 +1117,26 @@ void step() {
 			break;
 		case 0xAA:
 			if(NES::logging) opInfo.opName = "TAX";
-			memGet(reg.PC); //Dummy read of PC
 			opTAX();
 			break;
 		case 0xA8:
 			if(NES::logging) opInfo.opName = "TAY";
-			memGet(reg.PC); //Dummy read of PC
 			opTAY();
 			break;
 		case 0xBA:
 			if(NES::logging) opInfo.opName = "TSX";
-			memGet(reg.PC); //Dummy read of PC
 			opTSX();
 			break;
 		case 0x8A:
 			if(NES::logging) opInfo.opName = "TXA";
-			memGet(reg.PC); //Dummy read of PC
 			opTXA();
 			break;
 		case 0x9A:
 			if(NES::logging) opInfo.opName = "TXS";
-			memGet(reg.PC); //Dummy read of PC
 			opTXS();
 			break;
 		case 0x98:
 			if(NES::logging) opInfo.opName = "TYA";
-			memGet(reg.PC); //Dummy read of PC
 			opTYA();
 			break;
 		case 0x8B:
@@ -1173,9 +1145,7 @@ void step() {
 			break;
 	}
 
-	if(interruptOccured)
-		interruptOccured = false;
-	else if(NES::logging)
+	if(NES::logging)
 		logStep();
 
 }
@@ -1183,32 +1153,35 @@ void step() {
 void pollInterrupts() {
 	if(NMI_detected) {
 		NMI_triggered = true;
-		if(NES::logging) logInterrupt("[NMI triggered]");
 	}
 	else if(IRQ_detected && reg.P.I == 0) {
 		IRQ_triggered = true;
-		if(NES::logging) logInterrupt("[IRQ triggered]");
 	}
 }
 
 void interruptDetect()
 {
+	//Poll interrupts requests, and then check for new requests
+	pollInterrupts();
+	
 	if(NMI_line_went_low) {
 		NMI_detected = true;
 		NMI_line_went_low = false;
-		if(NES::logging) logInterrupt("[NMI line low detected]");
 	}
 	if(IRQ_line_low)
 		IRQ_detected = true;
 	else
 		IRQ_detected = false;
+}
 
+void forceNMI(bool setLow) {
+	setNMI(setLow);
+	NMI_detected = setLow;
 }
 
 void setNMI(bool setLow) {
 	if(NMI_line_low == false && setLow) {
 		NMI_line_went_low = true;
-		if(NES::logging) logInterrupt("[NMI line low]");
 	}
 	NMI_line_low = setLow;
 }
@@ -1219,15 +1192,13 @@ void setIRQ(bool setLow) {
 
 void OAMDMA_write() {
 	//dummy read cpuCycle
-	tick();
+	cpuRead(reg.PC);
 	if(cpuCycle % 2 == 1) {
 		//Odd cpuCycle
-		tick();
+		cpuRead(reg.PC);
 	}
 	for(int i = 0; i<256; ++i) {
-		tick();
-		PPU::regSet(0x2004,memGet((((uint16_t)OAMDMA)<<8)|((uint8_t)i)));
-		tick();
+		cpuWrite(0x2004, cpuRead((((uint16_t)OAMDMA)<<8)|((uint8_t)i)));
 	}
 }
 
@@ -1325,11 +1296,17 @@ void logStep()
 		<< " CYC:" << std::dec << std::setfill(' ') << std::setw(3) << opInfo.PPU_dot
 		<< " SL:" << std::setw(3) << opInfo.PPU_SL
 		<< " CPUCyc:" << (long long)opInfo.CPUcycle << std::endl;
+	
+	if(opInfo.interrupts != "")	NES::logFile << opInfo.interrupts << std::endl;
+	if(NMI_triggered) NES::logFile << "[NMI Triggered]" << std::endl;
+	else if(IRQ_triggered) NES::logFile << "[IRQ Triggered]" << std::endl;
+	opInfo.interrupts = "";
 }
 
 void logInterrupt(std::string txt)
 {
-	NES::logFile << txt << std::endl;
+	if(opInfo.interrupts != "") opInfo.interrupts += "\n";
+	opInfo.interrupts += txt;
 }
 
 
@@ -1346,9 +1323,8 @@ uint16_t Immediate() {
 }
 
 uint16_t ZeroPage() {
-	uint8_t addr = memGet(reg.PC);
+	uint8_t addr = cpuRead(reg.PC);
 	++reg.PC;
-	tick();
 	if(NES::logging) {
 		opInfo.addrMode = AddressingMode::ZEROPAGE;
 		opInfo.actAddr = opInfo.addrL = addr;
@@ -1357,75 +1333,65 @@ uint16_t ZeroPage() {
 }
 
 uint16_t ZeroPageX() {
-	uint8_t addr = memGet(reg.PC);
+	uint8_t addr = cpuRead(reg.PC);
 	if(NES::logging) {
 		opInfo.addrMode = AddressingMode::ZEROPAGEX;
 		opInfo.addrL = addr;
 	}
 	++reg.PC;
-	tick();
-	memGet(addr); //Dummy read
+	cpuRead(addr); //Dummy read
 	addr += reg.X;
-	tick();
 	if(NES::logging) opInfo.actAddr = addr;
 	return addr;
 }
 
 uint16_t ZeroPageY() {
-	uint8_t addr = memGet(reg.PC);
+	uint8_t addr = cpuRead(reg.PC);
 	if(NES::logging) {
 		opInfo.addrMode = AddressingMode::ZEROPAGEY;
 		opInfo.addrL = addr;
 	}
 	++reg.PC;
-	tick();
-	memGet(addr); //Dummy read
+	cpuRead(addr); //Dummy read
 	addr += reg.Y;
-	tick();
 	if(NES::logging) opInfo.actAddr = addr;
 	return addr;
 }
 
 uint16_t Absolute() {
-	uint16_t addr = memGet(reg.PC);
+	uint16_t addr = cpuRead(reg.PC);
 	if(NES::logging) {
 		opInfo.addrMode = AddressingMode::ABSOLUTE;
 		opInfo.addrL = addr;
 	}
 	++reg.PC;
-	tick();
-	uint16_t addr2 = ((uint16_t)memGet(reg.PC) << 8);
+	uint16_t addr2 = ((uint16_t)cpuRead(reg.PC) << 8);
 	if(NES::logging) opInfo.addrH = addr2 >> 8;
 	addr |= addr2;
 	++reg.PC;
-	tick();
 	if(NES::logging) opInfo.actAddr = addr;
 	return addr;
 }
 
 uint16_t AbsoluteX(OpType optype) {
-	uint16_t addr = memGet(reg.PC);
+	uint16_t addr = cpuRead(reg.PC);
 	if(NES::logging) {
 		opInfo.addrMode = AddressingMode::ABSOLUTEX;
 		opInfo.addrL = addr;
 	}
 	++reg.PC;
-	tick();
-	uint16_t addr2 = ((uint16_t)memGet(reg.PC) << 8);
+	uint16_t addr2 = ((uint16_t)cpuRead(reg.PC) << 8);
 	if(NES::logging) opInfo.addrH = addr2 >> 8;
 	addr |= addr2;
 	++reg.PC;
-	tick();
 
 	if(optype == READ) {
 		if((addr + reg.X) != ((addr & 0xFF00) | ((addr + reg.X) & 0xFF))) {
-			memGet((addr & 0xFF00) | ((addr + reg.X) & 0xFF)); //Dummy read
-			tick();
+			cpuRead((addr & 0xFF00) | ((addr + reg.X) & 0xFF)); //Dummy read
 		}
 	}
 	else if(optype == WRITE || optype == READWRITE) {
-		memGet((addr & 0xFF00) | ((addr + reg.X) & 0xFF)); //Dummy read
-		tick();
+		cpuRead((addr & 0xFF00) | ((addr + reg.X) & 0xFF)); //Dummy read
 	}
 	
 	addr += reg.X;	
@@ -1434,28 +1400,24 @@ uint16_t AbsoluteX(OpType optype) {
 }
 
 uint16_t AbsoluteY(OpType optype) {
-	uint16_t addr = memGet(reg.PC);
+	uint16_t addr = cpuRead(reg.PC);
 	if(NES::logging) {
 		opInfo.addrMode = AddressingMode::ABSOLUTEY;
 		opInfo.addrL = addr;
 	}
 	++reg.PC;
-	tick();
-	uint16_t addr2 = ((uint16_t)memGet(reg.PC) << 8);
+	uint16_t addr2 = ((uint16_t)cpuRead(reg.PC) << 8);
 	if(NES::logging) opInfo.addrH = addr2 >> 8;
 	addr |= addr2;
 	++reg.PC;
-	tick();
 
 	if(optype == READ) {
 		if ((addr + reg.Y) != ((addr & 0xFF00) | ((addr + reg.Y) & 0xFF))) {
-			memGet((addr & 0xFF00) | ((addr + reg.Y) & 0xFF)); //Dummy read
-			tick();
+			cpuRead((addr & 0xFF00) | ((addr + reg.Y) & 0xFF)); //Dummy read
 		}
 	}
 	else if(optype == WRITE || optype == READWRITE) {
-		memGet((addr & 0xFF00) | ((addr + reg.Y) & 0xFF)); //Dummy read
-		tick();
+		cpuRead((addr & 0xFF00) | ((addr + reg.Y) & 0xFF)); //Dummy read
 	}
 	
 	addr += reg.Y;	
@@ -1464,65 +1426,54 @@ uint16_t AbsoluteY(OpType optype) {
 }
 
 uint16_t Indirect() {
-	uint16_t addr_loc = memGet(reg.PC);
+	uint16_t addr_loc = cpuRead(reg.PC);
 	if(NES::logging) {
 		opInfo.addrMode = AddressingMode::INDIRECT;
 		opInfo.addrL = addr_loc;
 	}
 	++reg.PC;
-	tick();
-	uint16_t addr_loc2 = ((uint16_t)memGet(reg.PC) << 8);
+	uint16_t addr_loc2 = ((uint16_t)cpuRead(reg.PC) << 8);
 	if(NES::logging) opInfo.addrH = addr_loc2;
 	addr_loc |= addr_loc2;
 	++reg.PC;
-	tick();
-	uint16_t addr = memGet(addr_loc);
+	uint16_t addr = cpuRead(addr_loc);
 	//Implemented 6502 bug. If address if xxFF, next address is xx00 (eg 02FF and 0200)
-	addr |= ((uint16_t)memGet((addr_loc&0xFF00)|((uint8_t)(addr_loc+1))) << 8);
+	addr |= ((uint16_t)cpuRead((addr_loc&0xFF00)|((uint8_t)(addr_loc+1))) << 8);
 	if(NES::logging) opInfo.actAddr = addr;
 	return addr;
 }
 
 uint16_t IndirectX() {
-	uint8_t iaddr = memGet(reg.PC);
+	uint8_t iaddr = cpuRead(reg.PC);
 	if(NES::logging) {
 		opInfo.addrMode = AddressingMode::IDX_INDIRECT;
 		opInfo.addrL = iaddr;
 	}
 	++reg.PC;
-	tick();
-	memGet(iaddr); //Dummy read
+	cpuRead(iaddr); //Dummy read
 	iaddr += reg.X;
-	tick();
-	uint16_t addr = memGet(iaddr);
-	tick();
-	addr |= ((uint16_t)memGet((uint8_t)(iaddr+1)) << 8);
-	tick();
+	uint16_t addr = cpuRead(iaddr);
+	addr |= ((uint16_t)cpuRead((uint8_t)(iaddr+1)) << 8);
 	if(NES::logging) opInfo.actAddr = addr;
 	return addr;
 }
 
 uint16_t IndirectY(OpType optype) {
-	uint8_t iaddr = memGet(reg.PC);
+	uint8_t iaddr = cpuRead(reg.PC);
 	if(NES::logging) {
 		opInfo.addrMode = AddressingMode::INDIRECT_IDX;
 		opInfo.addrL = iaddr;
 	}
 	++reg.PC;
-	tick();
-	uint16_t addr = memGet(iaddr);
-	tick();
-	addr |= ((uint16_t)memGet((uint8_t)(iaddr+1)) << 8);
-	tick();
+	uint16_t addr = cpuRead(iaddr);
+	addr |= ((uint16_t)cpuRead((uint8_t)(iaddr+1)) << 8);
 	if(optype == READ) {
 		if ((addr + reg.Y) != ((addr & 0xFF00) | ((addr + reg.Y) & 0xFF))) {
-			memGet((addr & 0xFF00) | ((addr + reg.Y) & 0xFF)); //Dummy read
-			tick();
+			cpuRead((addr & 0xFF00) | ((addr + reg.Y) & 0xFF)); //Dummy read
 		}
 	}
 	else if(optype == WRITE || optype == READWRITE) {
-		memGet((addr & 0xFF00) | ((addr + reg.Y) & 0xFF)); //Dummy read
-		tick();
+		cpuRead((addr & 0xFF00) | ((addr + reg.Y) & 0xFF)); //Dummy read
 	}
 	
 	addr += reg.Y;
@@ -1534,32 +1485,26 @@ uint16_t IndirectY(OpType optype) {
 
 //CPU operation functions
 void opADC(uint16_t addr) {
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
-	tick();
 	uint16_t sum = reg.A + M + reg.P.C;
 	reg.P.C = (sum > 0xFF) ? 1 : 0;
 	reg.P.V = (~(reg.A^M) & (reg.A^((uint8_t)sum)) & 0x80) ? 1 : 0;
 	reg.A = (uint8_t)sum;
 	reg.P.Z = (reg.A == 0) ? 1 : 0;
 	reg.P.N = ((reg.A >> 7) > 0) ? 1 : 0;
-	pollInterrupts();
 }
 
 void opAHX(uint16_t addr) {
 	uint8_t val = reg.A & reg.X & (addr >> 8);
 	if(NES::logging) opInfo.val = val;
-	pollInterrupts();
-	tick();
-	memSet(addr, val);
+	cpuWrite(addr, val);
 }
 
 void opALR(uint16_t addr) {
 	// AND M followed by LSR A
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
-	pollInterrupts();
-	tick();
 	reg.A &= M;
 	reg.P.C = reg.A & 1; //Set to old A per LSR behavior
 	reg.A = reg.A >> 1;
@@ -1568,10 +1513,8 @@ void opALR(uint16_t addr) {
 }
 
 void opANC(uint16_t addr) {
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
-	pollInterrupts();
-	tick();
 	reg.A &= M;
 	reg.P.Z = (reg.A == 0);
 	reg.P.N = (reg.A >> 7) > 0;
@@ -1579,10 +1522,8 @@ void opANC(uint16_t addr) {
 }
 
 void opAND(uint16_t addr) {
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
-	pollInterrupts();
-	tick();
 	reg.A &= M;
 	reg.P.Z = (reg.A == 0);
 	reg.P.N = (reg.A >> 7) > 0;
@@ -1593,10 +1534,8 @@ void opARR(uint16_t addr) {
 	//Uses strange logic for flags
 	//See http://www.6502.org/users/andre/petindex/local/64doc.txt
 
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
-	pollInterrupts();
-	tick();
 	reg.A &= M;
 
 	reg.A = (reg.A >> 1) | (reg.P.C << 7);
@@ -1607,152 +1546,132 @@ void opARR(uint16_t addr) {
 }
 
 void opASL() {
+	cpuRead(reg.PC);
 	reg.P.C = ((reg.A >> 7) > 0) ? 1 : 0;
 	reg.A = reg.A << 1;
 	reg.P.Z = (reg.A == 0) ? 1 : 0;
 	reg.P.N = ((reg.A >> 7) > 0) ? 1 : 0;
-	pollInterrupts();
-	tick();
 }
 
 void opASL(uint16_t addr) {
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
-	tick();
-	memSet(addr, M); //Dummy write
-	tick();
+	cpuWrite(addr, M); //Dummy write
 	reg.P.C = ((M >> 7) > 0) ? 1 : 0;
 	M = M << 1;
 	reg.P.Z = (M == 0) ? 1 : 0;
 	reg.P.N = ((M >> 7) > 0) ? 1 : 0;
-	memSet(addr, M);
-	tick();
-	pollInterrupts();
+	cpuWrite(addr, M);
 }
 
 void opAXS(uint16_t addr) {
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
-	tick();
 	reg.P.C = ((reg.A & reg.X) >= M) ? 1 : 0;
 	reg.X = (reg.A & reg.X) - M;
 	reg.P.N = ((reg.X >> 7) > 0) ? 1 : 0;
 	reg.P.Z = (reg.X == 0) ? 1 : 0;
-	pollInterrupts();
 }
 
 void opBCC() {
-	int8_t delta = static_cast<int8_t>(memGet(reg.PC));
+	int8_t delta = static_cast<int8_t>(cpuRead(reg.PC));
 	if(NES::logging) opInfo.addrL = delta;
 	++reg.PC;
-	tick();
 	if(reg.P.C == 0) {
 		uint16_t oldPC = reg.PC;
 		reg.PC += delta;
-		if((oldPC & 0xFF00) != (reg.PC & 0xFF00))
-			tick(); //Moved to different page
-		tick();
+		if((oldPC & 0xFF00) != (reg.PC & 0xFF00)) {
+			cpuRead(reg.PC);
+		}
+		cpuRead(reg.PC);
 	}
-	pollInterrupts();
 }
 
 void opBCS() {
-	int8_t delta = static_cast<int8_t>(memGet(reg.PC));
+	int8_t delta = static_cast<int8_t>(cpuRead(reg.PC));
 	if(NES::logging) opInfo.addrL = delta;
 	++reg.PC;
-	tick();
 	if(reg.P.C) {
 		uint16_t oldPC = reg.PC;
 		reg.PC += delta;
-		if((oldPC & 0xFF00) != (reg.PC & 0xFF00))
-			tick(); //Moved to different page
-		tick();
+		if((oldPC & 0xFF00) != (reg.PC & 0xFF00)) {
+			cpuRead(reg.PC);
+		}
+		cpuRead(reg.PC);
 	}
-	pollInterrupts();
 }
 
 void opBEQ() {
-	int8_t delta = static_cast<int8_t>(memGet(reg.PC));
+	int8_t delta = static_cast<int8_t>(cpuRead(reg.PC));
 	if(NES::logging) opInfo.addrL = delta;
 	++reg.PC;
-	tick();
 	if(reg.P.Z) {
 		uint16_t oldPC = reg.PC;
 		reg.PC += delta;
-		if((oldPC & 0xFF00) != (reg.PC & 0xFF00))
-			tick(); //Moved to different page
-		tick();
+		if((oldPC & 0xFF00) != (reg.PC & 0xFF00)) {
+			cpuRead(reg.PC);
+		}
+		cpuRead(reg.PC);
 	}
-	pollInterrupts();
 }
 
 void opBIT(uint16_t addr) {
-	pollInterrupts();
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
 	reg.P.Z = (reg.A & M) == 0;
 	reg.P.N = (M & 1<<7) != 0;
 	reg.P.V = (M & 1<<6) != 0;
-	tick();
 }
 
 void opBMI() {
-	int8_t delta = static_cast<int8_t>(memGet(reg.PC));
+	int8_t delta = static_cast<int8_t>(cpuRead(reg.PC));
 	if(NES::logging) opInfo.addrL = delta;
 	++reg.PC;
-	tick();
 	if(reg.P.N) {
 		uint16_t oldPC = reg.PC;
 		reg.PC += delta;
-		if((oldPC & 0xFF00) != (reg.PC & 0xFF00))
-			tick(); //Moved to different page
-		tick();
+		if((oldPC & 0xFF00) != (reg.PC & 0xFF00)) {
+			cpuRead(reg.PC);
+		}
+		cpuRead(reg.PC);
 	}
-	pollInterrupts();
 }
 
 void opBNE() {
-	int8_t delta = static_cast<int8_t>(memGet(reg.PC));
+	int8_t delta = static_cast<int8_t>(cpuRead(reg.PC));
 	if(NES::logging) opInfo.addrL = delta;
 	++reg.PC;
-	tick();
 	if(reg.P.Z == 0) {
 		uint16_t oldPC = reg.PC;
 		reg.PC += delta;
-		if((oldPC & 0xFF00) != (reg.PC & 0xFF00))
-			tick(); //Moved to different page
-		tick();
+		if((oldPC & 0xFF00) != (reg.PC & 0xFF00)) {
+			cpuRead(reg.PC);
+		}
+		cpuRead(reg.PC);
 	}
-	pollInterrupts();
 }
 
 void opBPL() {
-	int8_t delta = static_cast<int8_t>(memGet(reg.PC));
+	int8_t delta = static_cast<int8_t>(cpuRead(reg.PC));
 	if(NES::logging) opInfo.addrL = delta;
 	++reg.PC;
-	tick();
 	if(reg.P.N == 0) {
 		uint16_t oldPC = reg.PC;
 		reg.PC += delta;
-		if((oldPC & 0xFF00) != (reg.PC & 0xFF00))
-			tick(); //Moved to different page
-		tick();
+		if((oldPC & 0xFF00) != (reg.PC & 0xFF00)) {
+			cpuRead(reg.PC);
+		}
+		cpuRead(reg.PC);
 	}
-	pollInterrupts();
 }
 
 void opBRK() {
-	memGet(reg.PC); //Dummy read
-	if(interruptOccured == false) //PC increment suppressed during interrupt commanded BRK
-		++reg.PC;
-	tick();
-
-	memSet(((uint16_t)0x01 << 8) | reg.SP, reg.PC >> 8);
+	cpuRead(reg.PC); //Dummy read
+	++reg.PC;
+	cpuWrite(((uint16_t)0x01 << 8) | reg.SP, reg.PC >> 8);
 	--reg.SP;
-	tick();
-	memSet(((uint16_t)0x01 << 8) | reg.SP, reg.PC);
+	cpuWrite(((uint16_t)0x01 << 8) | reg.SP, reg.PC);
 	--reg.SP;
-	tick();
 
 	//Copy P since the B flag is only passed onto stack
 	int8_t oldP = reg.P.value;
@@ -1760,17 +1679,19 @@ void opBRK() {
 	uint16_t newaddr;
 	//Will catch interrupts here
 	if(NMI_triggered || NMI_detected) {
-		interruptOccured = true;
 		newaddr = 0xFFFA;
 		reg.P.B = 2;
-		if(NES::logging && !NMI_triggered) logInterrupt("[NMI Interrupt during BRK]");
+		if(NES::logging) {
+			logInterrupt("[NMI Interrupt during BRK]");
+		}
 		NMI_detected = NMI_triggered = false;
 	}
 	else if(IRQ_triggered || IRQ_detected) {
-		interruptOccured = true;
 		newaddr = 0xFFFE;
 		reg.P.B = 2;
-		if(NES::logging && !IRQ_triggered) logInterrupt("[IRQ Interrupt during BRK]");
+		if(NES::logging) {
+			logInterrupt("[IRQ Interrupt during BRK]");
+		}
 		IRQ_detected = IRQ_triggered = false;
 	}
 	else {
@@ -1778,234 +1699,234 @@ void opBRK() {
 		reg.P.B = 3;
 		++reg.PC;
 	}
-	memSet(((uint16_t)0x01 << 8) | reg.SP, reg.P.value);
+	cpuWrite(((uint16_t)0x01 << 8) | reg.SP, reg.P.value);
 	reg.P.value = oldP;
 	reg.P.I = 1;
 	--reg.SP;
-	tick();
-	uint16_t addr = memGet(newaddr);
-	tick();
-	addr |= memGet(newaddr+1) << 8;
+	uint16_t addr = cpuRead(newaddr);
+	addr |= cpuRead(newaddr+1) << 8;
 	reg.PC = addr;
-	tick();
-	if(interruptOccured == false) pollInterrupts();
+	
+	//Don't immediately allow new interrupts to occur
+	NMI_triggered = IRQ_triggered = false;
+}
+
+void opBRKonIRQ() {
+	//Include opcode fetching
+	cpuRead(reg.PC); //Dummy read
+	cpuRead(reg.PC); //Dummy read
+
+	cpuWrite(((uint16_t)0x01 << 8) | reg.SP, reg.PC >> 8);
+	--reg.SP;
+	cpuWrite(((uint16_t)0x01 << 8) | reg.SP, reg.PC);
+	--reg.SP;
+
+	//Copy P since the B flag is only passed onto stack
+	int8_t oldP = reg.P.value;
+
+	uint16_t newaddr;
+	
+	if(NMI_triggered || NMI_detected) {
+		newaddr = 0xFFFA;
+		reg.P.B = 2;
+		NMI_detected = NMI_triggered = false;
+	}
+	else { //IRQ detected
+		newaddr = 0xFFFE;
+		reg.P.B = 2;
+		IRQ_detected = IRQ_triggered = false;
+	}
+
+	cpuWrite(((uint16_t)0x01 << 8) | reg.SP, reg.P.value);
+	reg.P.value = oldP;
+	reg.P.I = 1;
+	--reg.SP;
+	uint16_t addr = cpuRead(newaddr);
+	addr |= cpuRead(newaddr+1) << 8;
+	reg.PC = addr;
+	
+	//Don't immediately allow new interrupts to occur
+	NMI_triggered = IRQ_triggered = false;
 }
 
 void opBVC()  {
-	int8_t delta = static_cast<int8_t>(memGet(reg.PC));
+	int8_t delta = static_cast<int8_t>(cpuRead(reg.PC));
 	if(NES::logging) opInfo.addrL = delta;
 	++reg.PC;
-	tick();
 	if(reg.P.V == 0) {
 		uint16_t oldPC = reg.PC;
 		reg.PC += delta;
-		if((oldPC & 0xFF00) != (reg.PC & 0xFF00))
-			tick(); //Moved to different page
-		tick();
+		if((oldPC & 0xFF00) != (reg.PC & 0xFF00)) {
+			cpuRead(reg.PC);
+		}
+		cpuRead(reg.PC);
 	}
-	pollInterrupts();
 }
 
 void opBVS() {
-	int8_t delta = static_cast<int8_t>(memGet(reg.PC));
+	int8_t delta = static_cast<int8_t>(cpuRead(reg.PC));
 	if(NES::logging) opInfo.addrL = delta;
 	++reg.PC;
-	tick();
 	if(reg.P.V) {
 		uint16_t oldPC = reg.PC;
 		reg.PC += delta;
-		if((oldPC & 0xFF00) != (reg.PC & 0xFF00))
-			tick(); //Moved to different page
-		tick();
+		if((oldPC & 0xFF00) != (reg.PC & 0xFF00)) {
+			cpuRead(reg.PC);
+		}
+		cpuRead(reg.PC);
 	}
-	pollInterrupts();
 }
 
 void opCLC() {
-	pollInterrupts();
+	cpuRead(reg.PC);
 	reg.P.C = 0;
-	tick();
 }
 
 void opCLD() {
-	pollInterrupts();
+	cpuRead(reg.PC);
 	reg.P.D = 0;
-	tick();
 }
 
 void opCLI() {
-	pollInterrupts();
+	cpuRead(reg.PC);
 	reg.P.I = 0;
-	tick();
 }
 
 void opCLV() {
-	pollInterrupts();
+	cpuRead(reg.PC);
 	reg.P.V = 0;
-	tick();
 }
 
-void opCMP(uint8_t M) {
-	pollInterrupts();
+/*void opCMP(uint8_t M) {
+	//pollInterrupts();
 	reg.P.C = (reg.A >= M);
 	reg.P.Z = (reg.A == M);
 	reg.P.N = ((uint8_t)(reg.A-M)>>7) == 1;
-	tick();
-}
+	incCycle();
+}*/
 
 void opCMP(uint16_t addr) {
-	pollInterrupts();
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
-	tick();
 	reg.P.C = (reg.A >= M);
 	reg.P.Z = (reg.A == M);
 	reg.P.N = ((uint8_t)(reg.A-M)>>7) == 1;
-	//tick();
 }
 
-void opCPX(uint8_t M) {
-	pollInterrupts();
+/*void opCPX(uint8_t M) {
 	if(NES::logging) opInfo.val = M;
 	reg.P.C = (reg.X >= M);
 	reg.P.Z = (reg.X == M);
 	reg.P.N = ((uint8_t)(reg.X-M)>>7) == 1;
-	tick();
-}
+	incCycle();
+}*/
 
 void opCPX(uint16_t addr) {
-	pollInterrupts();
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
-	tick();
 	reg.P.C = (reg.X >= M);
 	reg.P.Z = (reg.X == M);
 	reg.P.N = ((uint8_t)(reg.X-M)>>7) == 1;
 }
 
-void opCPY(uint8_t M) {
-	pollInterrupts();
+/*void opCPY(uint8_t M) {
+	//pollInterrupts();
 	if(NES::logging) opInfo.val = M;
 	reg.P.C = (reg.Y >= M);
 	reg.P.Z = (reg.Y == M);
 	reg.P.N = ((uint8_t)(reg.Y-M)>>7) == 1;
-	tick();
-}
+	incCycle();
+}*/
 
 void opCPY(uint16_t addr) {
-	pollInterrupts();
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
-	tick();
 	reg.P.C = (reg.Y >= M);
 	reg.P.Z = (reg.Y == M);
 	reg.P.N = ((uint8_t)(reg.Y-M)>>7) == 1;
 }
 
 void opDCP(uint16_t addr) {
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
-	tick();
-	memSet(addr, M);
+	cpuWrite(addr, M);
 	M -= 1;
 	reg.P.C = (reg.A >= M);
 	reg.P.Z = (reg.A == M);
 	reg.P.N = ((uint8_t)(reg.A-M)>>7) == 1;
-	tick();
-	memSet(addr, M);
-	tick();
-	pollInterrupts();
+	cpuWrite(addr, M);
 }
 
 void opDEC(uint16_t addr) {
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
-	tick();
-	memSet(addr, M);
+	cpuWrite(addr, M);
 	M -= 1;
 	reg.P.Z = (M == 0);
 	reg.P.N = (M >> 7) > 0;
-	tick();
-	memSet(addr, M);
-	tick();
-	pollInterrupts();
+	cpuWrite(addr, M);
 }
 
 void opDEX() {
-	pollInterrupts();
+	cpuRead(reg.PC);
 	reg.X -= 1;
 	reg.P.Z = (reg.X == 0);
 	reg.P.N = (reg.X >> 7) > 0;
-	tick();
 }
 
 void opDEY() {
-	pollInterrupts();
+	cpuRead(reg.PC);
 	reg.Y -= 1;
 	reg.P.Z = (reg.Y == 0);
 	reg.P.N = (reg.Y >> 7) > 0;
-	tick();
 }
 
-void opEOR(void) {
-	pollInterrupts();
-	uint8_t M = memGet(reg.PC);
+void opEOR() {
+	uint8_t M = cpuRead(reg.PC);
 	if(NES::logging) opInfo.val = M;
 	reg.A ^= M;
 	reg.P.Z = (reg.A == 0);
 	reg.P.N = (reg.A >> 7) > 0;
-	tick();
 }
 
 void opEOR(uint16_t addr) {
-	pollInterrupts();
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
 	reg.A ^= M;
 	reg.P.Z = (reg.A == 0);
 	reg.P.N = (reg.A >> 7) > 0;
-	tick();
 }
 
 void opINC(uint16_t addr) {
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
-	tick();
-	memSet(addr, M);
+	cpuWrite(addr, M);
 	M += 1;
 	reg.P.Z = (M == 0);
 	reg.P.N = (M >> 7) > 0;
-	tick();
-	memSet(addr, M);
-	tick();
-	pollInterrupts();
+	cpuWrite(addr, M);
 }
 
 void opINX() {
-	pollInterrupts();
+	cpuRead(reg.PC);
 	reg.X += 1;
-	tick();
 	reg.P.Z = (reg.X == 0);
 	reg.P.N = (reg.X >> 7) > 0;
 }
 
 void opINY() {
-	pollInterrupts();
+	cpuRead(reg.PC);
 	reg.Y += 1;
-	tick();
 	reg.P.Z = (reg.Y == 0);
 	reg.P.N = (reg.Y >> 7) > 0;
 }
 
 void opISC(uint16_t addr) {
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
-	tick();
-	memSet(addr, M); //Dummy write
-	tick();
+	cpuWrite(addr, M); //Dummy write
 	M += 1;
-	memSet(addr, M);
-	tick();
+	cpuWrite(addr, M);
 	M = ~M;
 	uint16_t sum = reg.A + M + reg.P.C;
 	reg.P.C = (sum > 0xFF) ? 1 : 0;
@@ -2013,28 +1934,23 @@ void opISC(uint16_t addr) {
 	reg.A = (uint8_t)sum;
 	reg.P.Z = (reg.A == 0) ? 1 : 0;
 	reg.P.N = ((reg.A >> 7) > 0) ? 1 : 0;
-	pollInterrupts();
 }
 
 void opJMP(uint16_t addr) {
 	reg.PC = addr;
-	pollInterrupts();
 }
 
 void opJSR(uint16_t addr) {
-	memSet(((uint16_t)0x01 << 8) | reg.SP, (reg.PC-1) >> 8);
+	cpuRead((0x01 << 8) | reg.PC);
+	cpuWrite(((uint16_t)0x01 << 8) | reg.SP, (reg.PC-1) >> 8);
 	--reg.SP;
-	tick();
-	memSet(((uint16_t)0x01 << 8) | reg.SP, reg.PC-1);
+	cpuWrite(((uint16_t)0x01 << 8) | reg.SP, reg.PC-1);
 	--reg.SP;
-	tick();
 	reg.PC = addr;
-	tick();	
-	pollInterrupts();
 }
 
 void opLAS(uint16_t addr) {
-	uint8_t val = memGet(addr);
+	uint8_t val = cpuRead(addr);
 	if(NES::logging) opInfo.val = val;
 	val &= reg.SP;
 	reg.A = val;
@@ -2042,450 +1958,356 @@ void opLAS(uint16_t addr) {
 	reg.X = val;
 	reg.P.Z = (val == 0);
 	reg.P.N = ((val & 0x80) > 0);
-	tick();
-	pollInterrupts();
 }
 
 void opLAX(uint16_t addr) {
-	reg.A = memGet(addr);
+	reg.A = reg.X = cpuRead(addr);
 	if(NES::logging) opInfo.val = reg.A;
-	tick();
-	reg.X = memGet(addr);
 	reg.P.Z = (reg.X == 0);
 	reg.P.N = (reg.X >> 7) > 0;
-	pollInterrupts();
 }
 
 void opLDA() {
-	pollInterrupts();
-	reg.A = memGet(reg.PC);
+	reg.A = cpuRead(reg.PC);
 	if(NES::logging) opInfo.val = reg.A;
 	++reg.PC;
 	reg.P.Z = (reg.A == 0);
 	reg.P.N = (reg.A >> 7) > 0;
-	tick();
 }
 
 void opLDA(uint16_t addr) {
-	pollInterrupts();
-	reg.A = memGet(addr);
+	reg.A = cpuRead(addr);
 	if(NES::logging) opInfo.val = reg.A;
 	reg.P.Z = (reg.A == 0);
 	reg.P.N = (reg.A >> 7) > 0;
-	tick();
 }
 
 void opLDX() {
-	pollInterrupts();
-	reg.X = memGet(reg.PC);
+	reg.X = cpuRead(reg.PC);
 	if(NES::logging) opInfo.val = reg.X;
 	++reg.PC;
 	reg.P.Z = (reg.X == 0);
 	reg.P.N = (reg.X >> 7) > 0;
-	tick();
 }
 
 void opLDX(uint16_t addr) {
-	pollInterrupts();
-	reg.X = memGet(addr);
+	reg.X = cpuRead(addr);
 	if(NES::logging) opInfo.val = reg.X;
 	reg.P.Z = (reg.X == 0);
 	reg.P.N = (reg.X >> 7) > 0;
-	tick();
 }
 
 void opLDY() {
-	pollInterrupts();
-	reg.Y = memGet(reg.PC);
+	reg.Y = cpuRead(reg.PC);
 	if(NES::logging) opInfo.val = reg.Y;
 	++reg.PC;
 	reg.P.Z = (reg.Y == 0);
 	reg.P.N = (reg.Y >> 7) > 0;
-	tick();
 }
 
 void opLDY(uint16_t addr) {
-	pollInterrupts();
-	reg.Y = memGet(addr);
+	reg.Y = cpuRead(addr);
 	if(NES::logging) opInfo.val = reg.Y;
 	reg.P.Z = (reg.Y == 0);
 	reg.P.N = (reg.Y >> 7) > 0;
-	tick();
 }
 
 void opLSR() {
-	pollInterrupts();
+	cpuRead(reg.PC);
 	reg.P.C = reg.A & 1;
 	reg.A = reg.A >> 1;
 	reg.P.Z = (reg.A == 0);
 	reg.P.N = (reg.A >> 7) > 0;
-	tick();
 }
 
 void opLSR(uint16_t addr) {
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
-	tick();
-	memSet(addr, M); //Dummy write
-	tick();
+	cpuWrite(addr, M); //Dummy write
 	reg.P.C = M & 1;
 	M = M >> 1;
-	memSet(addr, M);
+	cpuWrite(addr, M);
 	reg.P.Z = (M == 0);
 	reg.P.N = (M >> 7) > 0;
-	tick();
-	pollInterrupts();
 }
 
 void opNOP(uint16_t addr) {
-	memGet(addr); //Dummy read
-	tick();
-	pollInterrupts();
+	cpuRead(addr); //Dummy read
 }
 
 void opORA(uint16_t addr) {
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
-	tick();
 	reg.A |= M;
 	reg.P.Z = (reg.A == 0);
 	reg.P.N = (reg.A >> 7) > 0;
-	pollInterrupts();
 }
 
 void opPHA() {
-	pollInterrupts();
-	memSet(((uint16_t)0x01 << 8) | reg.SP, reg.A);
+	cpuRead(reg.PC);
+	cpuWrite(((uint16_t)0x01 << 8) | reg.SP, reg.A);
 	--reg.SP;
-	tick();
-	tick();
 }
 
 void opPHP() {
-	pollInterrupts();
+	cpuRead(reg.PC);
 	int8_t Pold = reg.P.value;
 	reg.P.B = 3;
-	memSet(((uint16_t)0x01 << 8) | reg.SP, reg.P.value);
+	cpuWrite(((uint16_t)0x01 << 8) | reg.SP, reg.P.value);
 	reg.P.value = Pold;
 	--reg.SP;
-	tick();
-	tick();
 }
 
 void opPLA() {
+	cpuRead(reg.PC);
+	cpuRead((0x01 << 8) | reg.SP);
 	++reg.SP;
-	tick();
-	reg.A = memGet(((uint16_t)0x01 << 8) | reg.SP);
-	tick();
+	reg.A = cpuRead(((uint16_t)0x01 << 8) | reg.SP);
 	reg.P.Z = (reg.A == 0);
 	reg.P.N = (reg.A >> 7) > 0;
-	tick();
-	pollInterrupts();
 }
 
 void opPLP() {
-	pollInterrupts();
+	cpuRead(reg.PC);
+	cpuRead((0x01 << 8) | reg.SP);
 	++reg.SP;
-	tick();
-	reg.P.value = memGet(((uint16_t)0x01 << 8) | reg.SP);
+	reg.P.value = cpuRead(((uint16_t)0x01 << 8) | reg.SP);
 	reg.P.B = 0;
-	tick();
-	tick();
 }
 
 void opRLA(uint16_t addr) {
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
-	tick();
-	memSet(addr, M);
+	cpuWrite(addr, M);
 	uint8_t C0 = reg.P.C;
 	reg.P.C = (M >> 7) > 0;
 	M = M << 1;
 	M |= C0;
-	tick();
-	memSet(addr, M);
-	tick();
+	cpuWrite(addr, M);
 	reg.A &= M;
 	reg.P.Z = (reg.A == 0);
 	reg.P.N = (reg.A >> 7) > 0;
-	pollInterrupts();
 }
 
 void opROL() {
-	pollInterrupts();
+	cpuRead(reg.PC);
 	uint8_t C0 = reg.P.C;
 	reg.P.C = ((reg.A >> 7) > 0) ? 1 : 0;
 	reg.A = (reg.A << 1) | C0;
 	reg.P.Z = (reg.A == 0) ? 1 : 0;
 	reg.P.N = ((reg.A >> 7) > 0) ? 1 : 0;
-	tick();
 }
 
 void opROL(uint16_t addr) {
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
-	tick();
-	memSet(addr, M); //Dummy write
-	tick();
+	cpuWrite(addr, M); //Dummy write
 	uint8_t C0 = reg.P.C;
 	reg.P.C = ((M >> 7) > 0) ? 1 : 0;
 	M = (M << 1) | C0;
 	reg.P.Z = (M == 0) ? 1 : 0;
 	reg.P.N = ((M >> 7) > 0) ? 1 : 0;
-	memSet(addr, M);
-	tick();
-	pollInterrupts();
+	cpuWrite(addr, M);
 }
 
 void opROR() {
-	pollInterrupts();
+	cpuRead(reg.PC);
 	bool C0 = reg.P.C;
 	reg.P.C = (reg.A & 1);
 	reg.A = reg.A >> 1;
 	reg.A |= C0 ? (1 << 7) : 0;
 	reg.P.Z = (reg.A == 0);
 	reg.P.N = C0;
-	tick();
 }
 
 void opROR(uint16_t addr) {
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
-	tick();
-	memSet(addr, M); //Dummy write
-	tick();
+	cpuWrite(addr, M); //Dummy write
 	uint8_t C0 = reg.P.C;
 	reg.P.C = (M & 1);
 	M = M >> 1;
 	M |= C0 ? (1 << 7) : 0;
-	memSet(addr, M);
+	cpuWrite(addr, M);
 	reg.P.Z = (M == 0);
 	reg.P.N = C0;
-	tick();
-	pollInterrupts();
 }
 
 void opRRA(uint16_t addr) {
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
-	tick();
-	memSet(addr, M); //Dummy write
-	tick();
+	cpuWrite(addr, M); //Dummy write
 	uint8_t C0 = reg.P.C;
 	reg.P.C = (M & 1);
 	M = M >> 1;
 	M |= C0 ? (1 << 7) : 0;
-	memSet(addr, M);
-	tick();
+	cpuWrite(addr, M);
 	uint16_t sum = reg.A + M + reg.P.C;
 	reg.P.C = (sum > 0xFF) ? 1 : 0;
 	reg.P.V = (~(reg.A^M) & (reg.A^((uint8_t)sum)) & 0x80) ? 1 : 0;
 	reg.A = (uint8_t)sum;
 	reg.P.Z = (reg.A == 0) ? 1 : 0;
 	reg.P.N = ((reg.A >> 7) > 0) ? 1 : 0;
-	pollInterrupts();
 }
 
 void opRTI() {
+	cpuRead(reg.PC);
+	cpuRead(((uint16_t)0x01 << 8) | reg.SP);
 	++reg.SP;
-	reg.P.value = memGet(((uint16_t)0x01 << 8) | reg.SP);
+	reg.P.value = cpuRead(((uint16_t)0x01 << 8) | reg.SP);
 	reg.P.B = 0;
-	tick();
 	++reg.SP;
-	uint16_t addr = memGet(((uint16_t)0x01 << 8) | reg.SP);
-	tick();
+	uint16_t addr = cpuRead(((uint16_t)0x01 << 8) | reg.SP);
 	++reg.SP;
-	addr |= memGet(((uint16_t)0x01 << 8) | reg.SP) << 8;
-	tick();
+	addr |= cpuRead(((uint16_t)0x01 << 8) | reg.SP) << 8;
 	reg.PC = addr;
-	tick();
-	tick();
-	pollInterrupts();
 }
 
 void opRTS() {
+	cpuRead(reg.PC);
+	cpuRead(((uint16_t)0x01 << 8) | reg.SP);
 	++reg.SP;
-	uint16_t addr = memGet(((uint16_t)0x01 << 8) | reg.SP);
-	tick();
+	uint16_t addr = cpuRead(((uint16_t)0x01 << 8) | reg.SP);
 	++reg.SP;
-	addr |= memGet(((uint16_t)0x01 << 8) | reg.SP) << 8;
-	tick();
+	addr |= cpuRead(((uint16_t)0x01 << 8) | reg.SP) << 8;
+	cpuRead(reg.PC);
 	reg.PC = addr + 1;
-	tick();
-	tick();
-	tick();
-	pollInterrupts();
 }
 
 void opSAX(uint16_t addr) {
-	memSet(addr, reg.A&reg.X);
-	tick();
-	pollInterrupts();
+	cpuWrite(addr, reg.A&reg.X);
 }
 
 void opSBC(uint16_t addr) {
 	//SBC works the same as ADC, with the value from memory bit flipped
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
 	M = ~M;
-	tick();
 	uint16_t sum = reg.A + M + reg.P.C;
 	reg.P.C = (sum > 0xFF) ? 1 : 0;
 	reg.P.V = (~(reg.A^M) & (reg.A^((uint8_t)sum)) & 0x80) ? 1 : 0;
 	reg.A = (uint8_t)sum;
 	reg.P.Z = (reg.A == 0) ? 1 : 0;
 	reg.P.N = ((reg.A >> 7) > 0) ? 1 : 0;
-	pollInterrupts();
 }
 
 void opSEC() {
-	pollInterrupts();
+	cpuRead(reg.PC);
 	reg.P.C = 1;
-	tick();
 }
 
 void opSED() {
-	pollInterrupts();
+	cpuRead(reg.PC);
 	reg.P.D = 1;
-	tick();
 }
 
 void opSEI() {
-	pollInterrupts();
+	cpuRead(reg.PC);
 	reg.P.I = 1;
-	tick();
 }
 
 void opSHX(uint16_t addr) {
 	uint8_t H = addr >> 8;
 	uint8_t L = addr & 0xFF;
 	uint8_t val = reg.X & (H + 1);
-	memSet(((uint16_t)val << 8) | L, val);
-	tick();
-	pollInterrupts();
+	cpuWrite(((uint16_t)val << 8) | L, val);
 }
 
 void opSHY(uint16_t addr) {
 	uint8_t H = addr >> 8;
 	uint8_t L = addr & 0xFF;
 	uint8_t val = reg.Y & (H + 1);
-	memSet(((uint16_t)val << 8) | L, val);
-	tick();
-	pollInterrupts();
+	cpuWrite(((uint16_t)val << 8) | L, val);
 }
 
 void opSLO(uint16_t addr) {
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
-	tick();
-	memSet(addr, M);
+	cpuWrite(addr, M);
 	reg.P.C = (M >> 7) > 0;
 	M = M << 1;
-	tick();
-	memSet(addr, M);
-	tick();
+	cpuWrite(addr, M);
 	reg.A |= M;
 	reg.P.Z = (reg.A == 0);
 	reg.P.N = (reg.A >> 7) > 0;
-	pollInterrupts();
 }
 
 void opSRE(uint16_t addr) {
-	uint8_t M = memGet(addr);
+	uint8_t M = cpuRead(addr);
 	if(NES::logging) opInfo.val = M;
-	tick();
-	memSet(addr, M);
+	cpuWrite(addr, M);
 	reg.P.C = M & 1;
 	M = M >> 1;
-	tick();
-	memSet(addr, M);
-	tick();
+	cpuWrite(addr, M);
 	reg.A ^= M;
 	reg.P.Z = (reg.A == 0);
 	reg.P.N = (reg.A >> 7) > 0;
-	pollInterrupts();
 }
 
 void opSTA(uint16_t addr) {
-	pollInterrupts();
-	memSet(addr, reg.A);
-	tick();
+	cpuWrite(addr, reg.A);
 }
 
 void opSTX(uint16_t addr) {
-	pollInterrupts();
-	memSet(addr, reg.X);
-	tick();
+	cpuWrite(addr, reg.X);
 }
 
 void opSTY(uint16_t addr) {
-	pollInterrupts();
-	memSet(addr, reg.Y);
-	tick();
+	cpuWrite(addr, reg.Y);
 }
 
 void opTAS(uint16_t addr) {
 	reg.SP = reg.A & reg.X;
 	uint8_t val = reg.A & reg.X & (addr >> 8);
-	memSet(addr, val);
-	tick();
-	pollInterrupts();
+	cpuWrite(addr, val);
 }
 
 void opTAX() {
-	pollInterrupts();
+	cpuRead(reg.PC);
 	reg.X = reg.A;
 	reg.P.Z = (reg.X == 0);
 	reg.P.N = (reg.X >> 7) > 0;
-	tick();
 }
 
 void opTAY() {
-	pollInterrupts();
+	cpuRead(reg.PC);
 	reg.Y = reg.A;
 	reg.P.Z = (reg.Y == 0);
 	reg.P.N = (reg.Y >> 7) > 0;
-	tick();
 }
 
 void opTSX() {
-	pollInterrupts();
+	cpuRead(reg.PC);
 	reg.X = reg.SP;
 	reg.P.Z = (reg.X == 0);
 	reg.P.N = (reg.X >> 7) > 0;
-	tick();
 }
 
 void opTXA() {
-	pollInterrupts();
+	cpuRead(reg.PC);
 	reg.A = reg.X;
 	reg.P.Z = (reg.A == 0);
 	reg.P.N = (reg.A >> 7) > 0;
-	tick();
 }
 
 void opTXS() {
-	pollInterrupts();
+	cpuRead(reg.PC);
 	reg.SP = reg.X;
-	tick();
 }
 
 void opTYA() {
-	pollInterrupts();
+	cpuRead(reg.PC);
 	reg.A = reg.Y;
 	reg.P.Z = (reg.A == 0);
 	reg.P.N = (reg.A >> 7) > 0;
-	tick();
 }
 
 void opXAA(uint16_t addr) {
-	uint8_t val = memGet(addr);
+	uint8_t val = cpuRead(addr);
 	if(NES::logging) opInfo.val = val;
-	tick();
 	reg.A = reg.X & val;
 	reg.P.N = (reg.A & 0x80) > 0;
 	reg.P.Z = (reg.A == 0);
-	pollInterrupts();
 }
 
 }

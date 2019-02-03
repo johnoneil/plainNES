@@ -113,11 +113,29 @@ void reset() {
 
 void step()
 {
+	++dot;
+	if(dot >= 341) {
+		dot = 0;
+		++scanline;
+	}
+	if(scanline >= 262) {
+		++frame;
+		scanline = 0;
+	}
+	++ppuClock;
+
 	//Check for skipped cycle. Occurs at 0,0 on odd frames when rendering enabled
 	if((scanline == 261) && (dot == 339) && (showBG || showSpr) && (frame % 2 == 1))
 		dot++;
 
 	if(scanline == 241 && dot == 1) {
+		if(PPUSTATUS_read_on_cycle < ppuClock - 1) {
+			vblank = true;
+			if(NMIenable)
+				CPU::setNMI(true);
+		}
+	}
+	/*if(scanline == 241 && dot == 1) {
 		//Check if PPUSTATUS read within a clock cycle of now
 		if(PPUSTATUS_read_on_cycle == ppuClock) {
 			//Do nothing
@@ -127,7 +145,7 @@ void step()
 			if(NMIenable)
 				CPU::setNMI(true);
 		}
-	}
+	}*/
 	/*else if(scanline == 241 && dot == 2 ) {
 		//If PPUSTATUS read on same clock cycle or one later than vblank, unset flags
 		if(PPUSTATUS_read_on_cycle >= (ppuClock - 1)) {
@@ -145,19 +163,7 @@ void step()
 		if(rendering) renderFrameStep();
 	}
 
-	++dot;
-	if(dot >= 341) {
-		dot = 0;
-		++scanline;
-	}
-
-	if(scanline >= 262) {
-		++frame;
-		scanline = 0;
-		frameReady = true;
-	}
-
-	++ppuClock;
+	if(scanline == 240 && dot == 0) frameReady = true;
 }
 
 uint8_t regGet(uint16_t addr, bool peek)
@@ -178,7 +184,10 @@ uint8_t regGet(uint16_t addr, bool peek)
 			if(peek == false) {
 				PPUSTATUS_read_on_cycle = ppuClock;
 				vblank = 0;
-				CPU::setNMI(false);
+				if(scanline == 241 && (dot == 1 || dot == 2))
+					CPU::forceNMI(false);
+				else
+					CPU::setNMI(false);
 				writeToggle = 0;
 				ioBus = (ioBus & 0x1F) | status;
 				return ioBus;
