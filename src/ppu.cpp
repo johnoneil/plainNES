@@ -257,10 +257,14 @@ void regSet(uint16_t addr, uint8_t val)
 	ioBus = val; //Set I/O bus to value
 	switch(addr) {
 		case 0x2000: //PPUCTRL
-			NMIenable = (val >> 7) > 0;
-			if(NMIenable && vblank)
-				CPU::setNMI(true);
+			if(NMIenable == false && (val >> 7) > 0) {
+				NMIenable = true;
+				if(vblank)
+					CPU::setNMI(true);
+			}
 			else
+				NMIenable = (val >> 7) > 0;
+			if(NMIenable == false || vblank == false)
 				CPU::setNMI(false);
 			spriteSize = (val & 0x20) > 0;
 			backgroundTileSel = (val & 0x10) > 0;
