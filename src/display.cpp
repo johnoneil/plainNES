@@ -101,5 +101,30 @@ void Display::renderFrame()
 
 void Display::resizeImage()
 {
+    int winWidth, winHeight;
+    float wRatio, hRatio;
+    SDL_GL_GetDrawableSize(window, &winWidth, &winHeight);
 
+    if((float)textureWidth/textureHeight > (float)winWidth/winHeight) { //Window taller
+        wRatio = 1.0f;
+        hRatio = ((float)winWidth/winHeight) / ((float)textureWidth/textureHeight);
+    }
+    else { //Window wider
+        hRatio = 1.0f;
+        wRatio = ((float)textureWidth/textureHeight) / ((float)winWidth/winHeight);
+    }
+
+    vertices[0] = vertices[5] = wRatio;
+    vertices[10] = vertices[15] = -wRatio;
+    vertices[1] = vertices[16] = hRatio;
+    vertices[6] = vertices[11] = -hRatio;
+
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    glViewport(0, 0, winWidth, winHeight);
+}
+
+uint32_t Display::getWindowID()
+{
+    return SDL_GetWindowID(window);
 }

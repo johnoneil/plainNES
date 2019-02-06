@@ -17,6 +17,8 @@ public:
         const char* vertexPath, const char* fragmentPath);
     void loadTexture(int width, int height, uint8_t *data);
     void renderFrame();
+    void resizeImage();
+    uint32_t getWindowID();
 
 private:
     int textureWidth, textureHeight;
@@ -37,7 +39,4 @@ private:
         0, 1, 3, // first triangle
         1, 2, 3  // second triangle
     };
-
-    void resizeImage();
-
 };

@@ -51,7 +51,7 @@ int init()
         return 1;
     }
 
-    mainDisplay.init(SCREEN_WIDTH, SCREEN_HEIGHT, "plainNES", "texture.vert", "texture.frag");
+    mainDisplay.init(SCREEN_WIDTH*SCREEN_SCALE, SCREEN_HEIGHT*SCREEN_SCALE, "plainNES", "texture.vert", "texture.frag");
 
     if(initAudio()) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize Audio: %s", SDL_GetError());
@@ -162,8 +162,13 @@ void update()
 {  
     while( SDL_PollEvent(&event) != 0) {
         if(event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE) {
-            quit = true;
+            if(event.window.windowID == mainDisplay.getWindowID())
+                quit = true;
             return;
+        }
+        else if(event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+            if(event.window.windowID == mainDisplay.getWindowID())
+                mainDisplay.resizeImage();
         }
         else if(event.type == SDL_KEYDOWN)
         {
