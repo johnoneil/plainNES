@@ -26,8 +26,7 @@ extern bool quit;
 
 void setOptions(int options);
 int init();
-int initMainWindow();
-int initPPUWindow();
+//int initPPUWindow();
 int initAudio();
 void update();
 void updateMainWindow();

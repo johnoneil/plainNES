@@ -1,8 +1,9 @@
 #include "gui.h"
+#include "display.h"
 #include "nes.h"
 #include "render.h"
 #include <SDL.h>
-#include <SDL_ttf.h>
+#include <glad/glad.h>
 #include <cstring>
 #include <array>
 #include <vector>
@@ -10,24 +11,7 @@
 
 namespace GUI {
 
-SDL_Window *mainwindow;
-SDL_Renderer *mainrenderer;
-SDL_Texture *maintexture;
-SDL_Texture *FPStextTexture;
-SDL_Surface *FPStextSurface;
-SDL_Color FPStextColor = {0};
-TTF_Font *gFont = NULL;
-SDL_Rect textRect;
-char FPStext[20];
-float avgFPS = 0;
-
-SDL_Window *PPUwindow;
-SDL_Renderer *PPUrenderer;
-SDL_Texture *PTtexture0;
-SDL_Texture *PTtexture1;
-SDL_Rect rectPT0, rectPT1;
-std::array<std::array<SDL_Rect, 4>, 8> PaletteRect;
-
+Display mainDisplay;
 SDL_Event event;
 const uint8_t *kbState = SDL_GetKeyboardState(NULL);
 
@@ -62,70 +46,25 @@ int init()
 {
     RENDER::init();
 
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_NOPARACHUTE) < 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize SDL: %s", SDL_GetError());
         return 1;
     }
 
-    if(TTF_Init() == -1) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "TTF_Init: %s\n", TTF_GetError());
-        return 1;
-    }
-
-    if(initMainWindow()) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize Main Window: %s", SDL_GetError());
-        return 1;
-    }
-
-    if(debugPPU) {
-        if(initPPUWindow()) {
-            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize Main Window: %s", SDL_GetError());
-            return 1;
-        }
-    }
+    mainDisplay.init(SCREEN_WIDTH, SCREEN_HEIGHT, "plainNES", "texture.vert", "texture.frag");
 
     if(initAudio()) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize Audio: %s", SDL_GetError());
         return 1;
     }
 
-    gFont = TTF_OpenFont( "Roboto-Regular.ttf", 12 );
-    if( gFont == NULL )
-    {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to load font! SDL_ttf Error: %s\n", TTF_GetError() );
-        return 1;
-    }
+    mainpixelMap.fill(0x000000FF);
+    mainDisplay.loadTexture(SCREEN_WIDTH, SCREEN_HEIGHT, mainpixelMap.data());
 
     return 0;
 }
 
-int initMainWindow() {
-    mainwindow = SDL_CreateWindow("plainNES",
-                SDL_WINDOWPOS_UNDEFINED,
-                SDL_WINDOWPOS_UNDEFINED,
-                SCREEN_WIDTH*SCREEN_SCALE,SCREEN_HEIGHT*SCREEN_SCALE,
-                0);
-    
-    mainrenderer = SDL_CreateRenderer(mainwindow, -1, 0);
-    SDL_RenderSetScale(mainrenderer, SCREEN_SCALE, SCREEN_SCALE);
-    maintexture = SDL_CreateTexture(mainrenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, SCREEN_WIDTH, SCREEN_HEIGHT);
-
-    for(int i=0; i<SCREEN_WIDTH*SCREEN_HEIGHT; ++i) {
-        mainpixelMap[i] = 0xFF000000;
-    }
-
-    FPStextColor.r = 255;
-    FPStextColor.g = 0;
-    FPStextColor.b = 0;
-
-    SDL_UpdateTexture(maintexture, NULL, mainpixelMap.data(), SCREEN_WIDTH*4);
-    SDL_RenderCopy(mainrenderer, maintexture, NULL, NULL);
-    SDL_RenderPresent(mainrenderer);
-
-    return 0;
-}
-
-int initPPUWindow() {
+/*int initPPUWindow() {
     PPUwindow = SDL_CreateWindow("plainNES - PPU Debugging",
                 50, 50,
                 (32*8 + 62 + 4 + 4)*SCREEN_SCALE,(16*8 + 4)*SCREEN_SCALE,
@@ -187,7 +126,7 @@ int initPPUWindow() {
     SDL_RenderPresent(PPUrenderer);
 
     return 0;
-}
+}*/
 
 int initAudio() {
     audio_rb_idx = 0;
@@ -310,11 +249,11 @@ void update()
 
     //Update controller 2 keypresses
     NES::controller_state[1] = 0;
-
+    
     updateMainWindow();
-    if(debugPPU) {
-        updatePPUWindow();
-    }
+    //if(debugPPU) {
+    //    updatePPUWindow();
+    //}
     if(disableAudio == false)
         updateAudio();
 
@@ -323,25 +262,11 @@ void update()
 void updateMainWindow() {
     RENDER::convertNTSC2ARGB(mainpixelMap.data(), NES::getPixelMap(), SCREEN_WIDTH*SCREEN_HEIGHT);
 
-    SDL_UpdateTexture(maintexture, NULL, mainpixelMap.data(), SCREEN_WIDTH*4);
-    SDL_RenderCopy(mainrenderer, maintexture, NULL, NULL);
-
-    //FPS text
-    if(showFPS) {
-        snprintf(FPStext, sizeof(FPStext), "%.2f", avgFPS);
-        FPStextSurface = TTF_RenderText_Blended( gFont, FPStext, FPStextColor );
-        textRect.w = FPStextSurface->w;
-        textRect.h = FPStextSurface->h;
-        textRect.x = SCREEN_WIDTH-textRect.w;
-        textRect.y = 0;
-        FPStextTexture = SDL_CreateTextureFromSurface(mainrenderer, FPStextSurface);
-        SDL_RenderCopy(mainrenderer, FPStextTexture, NULL, &textRect);
-    }
-
-    SDL_RenderPresent(mainrenderer);
+    mainDisplay.loadTexture(SCREEN_WIDTH, SCREEN_HEIGHT, mainpixelMap.data());
+    mainDisplay.renderFrame();
 }
 
-void updatePPUWindow() {
+/*void updatePPUWindow() {
     std::array<std::array<uint8_t, 16*16*64>, 2> PTarrays = NES::getPatternTableBuffers();
     RENDER::convertNTSC2ARGB(PTpixelMap.data(), PTarrays[0].data(), PTarrays[0].size());
     SDL_UpdateTexture(PTtexture0, NULL, PTpixelMap.data(), 16*8*4);
@@ -368,7 +293,7 @@ void updatePPUWindow() {
     }
 
     SDL_RenderPresent(PPUrenderer);
-}
+}*/
 
 void updateAudio() {
     //Currently downsample using nearest neighbor method
@@ -412,8 +337,8 @@ void fill_audio_buffer(void *user_data, uint8_t *out, int byte_count) {
 
 void close()
 {
-    SDL_DestroyWindow(mainwindow);
-    SDL_DestroyWindow(PPUwindow);
+    delete &mainDisplay;
+    //SDL_DestroyWindow(PPUwindow);
     SDL_CloseAudioDevice(1);
     SDL_Quit();
     return;

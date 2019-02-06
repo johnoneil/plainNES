@@ -82,7 +82,7 @@ int main(int argc, char *argv[])
 			frameEnd = boost::chrono::high_resolution_clock::now();
 			avgFrameDuration_ns = (frameEnd - frameStart)/avgWindow;
 			frameStart = frameEnd;
-			GUI::avgFPS = 1000000000.0f/(avgFrameDuration_ns.count());
+			//GUI::avgFPS = 1000000000.0f/(avgFrameDuration_ns.count());
 			framenum = 0;
 		}
 		++framenum;
