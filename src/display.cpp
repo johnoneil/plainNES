@@ -78,9 +78,9 @@ void Display::init(int width, int height, const char* title, const char* vertexP
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 }
 
-void Display::loadTexture(int width, int height, uint32_t *data)
+void Display::loadTexture(int width, int height, uint8_t *data)
 {
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
     textureHeight = height;
     textureWidth = width;
 }
@@ -101,5 +101,5 @@ void Display::renderFrame()
 
 void Display::resizeImage()
 {
-    
+
 }

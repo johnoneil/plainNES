@@ -15,7 +15,7 @@ public:
     ~Display();
     void init(int width, int height, const char* title,
         const char* vertexPath, const char* fragmentPath);
-    void loadTexture(int width, int height, uint32_t *data);
+    void loadTexture(int width, int height, uint8_t *data);
     void renderFrame();
 
 private:

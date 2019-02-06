@@ -15,7 +15,7 @@ Display mainDisplay;
 SDL_Event event;
 const uint8_t *kbState = SDL_GetKeyboardState(NULL);
 
-std::array<uint32_t, SCREEN_WIDTH * SCREEN_HEIGHT> mainpixelMap;
+std::array<uint8_t, SCREEN_WIDTH * SCREEN_HEIGHT * 3> mainpixelMap;
 std::array<uint32_t, 16*8 * 16*8> PTpixelMap;
 
 //Ratio between APU sample rate and emulator sample rate isn't a
@@ -260,7 +260,7 @@ void update()
 }
 
 void updateMainWindow() {
-    RENDER::convertNTSC2ARGB(mainpixelMap.data(), NES::getPixelMap(), SCREEN_WIDTH*SCREEN_HEIGHT);
+    RENDER::convertNTSC2RGB(mainpixelMap.data(), NES::getPixelMap(), SCREEN_WIDTH*SCREEN_HEIGHT*3);
 
     mainDisplay.loadTexture(SCREEN_WIDTH, SCREEN_HEIGHT, mainpixelMap.data());
     mainDisplay.renderFrame();

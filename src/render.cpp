@@ -16,16 +16,18 @@ int init()
             return 1;
         }
         PALfile.read((char*)buffer.data(), 3);
-        NTSCkey[i] = (0xFF << 24)|(buffer[0]<<16)|(buffer[1]<<8)|(buffer[2]);
+        NTSCkey[i] = (buffer[0]<<16)|(buffer[1]<<8)|(buffer[2]);
     }
     PALfile.close();
     return 0;
 }
 
-uint32_t* convertNTSC2ARGB(uint32_t* outputBuffer, uint8_t* inputPixelMap, int size)
+uint8_t* convertNTSC2RGB(uint8_t* outputBuffer, uint8_t* inputPixelMap, int size)
 {
-    for(int i=0; i<size; ++i) {
-        outputBuffer[i] = NTSCkey[inputPixelMap[i]];
+    for(int i=0; i<(size/3); ++i) {
+        outputBuffer[i*3 + 0] = (NTSCkey[inputPixelMap[i]] >> 16) & 0xFF;
+        outputBuffer[i*3 + 1] = (NTSCkey[inputPixelMap[i]] >> 8) & 0xFF;
+        outputBuffer[i*3 + 2] = NTSCkey[inputPixelMap[i]] & 0xFF;
     }
     return outputBuffer;
 }
