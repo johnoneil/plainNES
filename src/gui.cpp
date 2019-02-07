@@ -2,6 +2,9 @@
 #include "display.h"
 #include "nes.h"
 #include "render.h"
+#include "imgui/imgui.h"
+#include "imgui/imgui_impl_sdl.h"
+#include "imgui/imgui_impl_opengl3.h"
 #include <SDL.h>
 #include <glad/glad.h>
 #include <cstring>
@@ -51,7 +54,21 @@ int init()
         return 1;
     }
 
-    mainDisplay.init(SCREEN_WIDTH*SCREEN_SCALE, SCREEN_HEIGHT*SCREEN_SCALE, "plainNES", "texture.vert", "texture.frag");
+    int expectedMenuBarSize = 19;
+    mainDisplay.init(SCREEN_WIDTH*SCREEN_SCALE, SCREEN_HEIGHT*SCREEN_SCALE + expectedMenuBarSize, "plainNES", "texture.vert", "texture.frag");
+
+    // Setup imGui context
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+
+    // Setup imGui style
+    ImGui::StyleColorsDark();
+
+    // Setup Platform/Renderer bindings
+    ImGui_ImplSDL2_InitForOpenGL(mainDisplay.getWindow(), mainDisplay.getContext());
+    ImGui_ImplOpenGL3_Init("#version 330");
+
+    mainDisplay.setMenuCallback(_drawmainMenuBar);
 
     if(initAudio()) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize Audio: %s", SDL_GetError());
@@ -266,8 +283,8 @@ void update()
 
 void updateMainWindow() {
     RENDER::convertNTSC2RGB(mainpixelMap.data(), NES::getPixelMap(), SCREEN_WIDTH*SCREEN_HEIGHT*3);
-
     mainDisplay.loadTexture(SCREEN_WIDTH, SCREEN_HEIGHT, mainpixelMap.data());
+
     mainDisplay.renderFrame();
 }
 
@@ -339,6 +356,146 @@ void fill_audio_buffer(void *user_data, uint8_t *out, int byte_count) {
         memset(out, 0, byte_count);
     }
 }
+
+void _drawmainMenuBar() {
+	static bool menu_open_file = false;
+	static bool menu_quit = false;
+	static bool menu_emu_run = false;
+	static bool menu_emu_pause = false;
+	static bool menu_emu_step = false;
+	static bool menu_emu_power = false;
+	static bool menu_emu_reset = false;
+	static bool menu_emu_speed100 = false;
+	static bool menu_emu_speedmax = false;
+    //static bool menu_configInput = false;
+	static bool menu_showFPS = false;
+	static bool menu_debugWindow = false;
+	//static std::map<std::string, bool> menu_open_recent;
+	
+	if(menu_open_file){ onOpenFile(); menu_open_file = false; }
+	if(menu_quit){ onQuit(); menu_quit = false; }
+	if(menu_emu_run){ onEmuRun(); menu_emu_run = false; }
+	if(menu_emu_pause){ onEmuPause(); menu_emu_pause = false; }
+	//if(menu_emu_step){ onEmuStep(); menu_emu_step = false; }
+	if(menu_emu_power){ onEmuPower(); menu_emu_power = false; }
+	if(menu_emu_reset){ onEmuReset(); menu_emu_reset = false; }
+	if(menu_emu_speed100){ onEmuSpeed(100); menu_emu_speed100 = false; }
+	if(menu_emu_speedmax){ onEmuSpeedMax(); menu_emu_speedmax = false; }
+    //if(menu_configInput){ onConfigInput(); menu_configInput = false; }
+	if(menu_showFPS){ onShowFPS(); menu_showFPS = false; }
+	if(menu_debugWindow){ onDebugWindow(); menu_debugWindow = false; }
+
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplSDL2_NewFrame(mainDisplay.getWindow());
+    ImGui::NewFrame();
+
+	if (ImGui::BeginMainMenuBar())
+	{
+		mainDisplay.setMenuBarHeight(ImGui::GetWindowHeight());
+		if (ImGui::BeginMenu("File"))
+		{	
+			ImGui::MenuItem("Open", NULL, &menu_open_file);
+            //TODO Implement recently opened. Would need an ini type file created most likely
+			/*if (ImGui::BeginMenu("Recent"))
+			{
+				for(item : menu_open_recent)
+				{
+					ImGui::MenuItem(item[0], NULL, &item[1]);
+				}
+				ImGui::EndMenu();
+			}
+			*/
+			ImGui::MenuItem("Quit", NULL, &menu_quit);
+			ImGui::EndMenu();
+		}
+		if (ImGui::BeginMenu("Emulator"))
+		{
+			ImGui::MenuItem("Run", NULL, &menu_emu_run);
+			ImGui::MenuItem("Pause", NULL, &menu_emu_pause);
+			//ImGui::MenuItem("Step", NULL, &menu_emu_step);
+			ImGui::Separator();
+			ImGui::MenuItem("Power", NULL, &menu_emu_power);
+			ImGui::MenuItem("Reset", NULL, &menu_emu_reset);
+			ImGui::EndMenu();
+		}
+		if (ImGui::BeginMenu("Speed"))
+		{
+			ImGui::MenuItem("100%%", NULL, &menu_emu_speed100);
+			ImGui::MenuItem("Max (No Audio)", NULL, &menu_emu_speedmax);
+			ImGui::EndMenu();
+		}
+		if (ImGui::BeginMenu("Options"))
+		{
+            //ImGui::MenuItem("Configure Input", NULL, &menu_configInput);
+			ImGui::MenuItem("Show FPS", NULL, &menu_showFPS);
+			ImGui::MenuItem("Debug Window", NULL, &menu_debugWindow, false);
+			ImGui::EndMenu();
+		}
+        if(showFPS) {
+            std::string FPStext = "FPS: " + std::to_string(ImGui::GetIO().Framerate);
+            ImGui::TextColored(ImColor(255,100,100), FPStext.c_str());
+        }
+		ImGui::EndMainMenuBar();
+	}
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
+void onOpenFile()
+{
+    std::cout << "Open file" << std::endl;
+}
+
+void onQuit()
+{
+    quit = true;
+}
+
+void onEmuRun()
+{
+    std::cout << "Run" << std::endl;
+}
+
+void onEmuPause()
+{
+    std::cout << "Pause" << std::endl;
+}
+
+//void onEmuStep()
+//{
+//    std::cout << "Step" << std::endl;
+//}
+
+void onEmuPower()
+{
+    NES::powerOn();
+}
+
+void onEmuReset()
+{
+    NES::reset();
+}
+
+void onEmuSpeed(int pct)
+{
+    disableAudio = false;
+}
+
+void onEmuSpeedMax()
+{
+    disableAudio = true;
+}
+
+void onShowFPS()
+{
+    showFPS = !showFPS;
+}
+
+void onDebugWindow()
+{
+    //TODO get debug window working
+}
+
 
 void close()
 {

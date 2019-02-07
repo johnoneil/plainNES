@@ -76,6 +76,8 @@ void Display::init(int width, int height, const char* title, const char* vertexP
     // set texture filtering parameters
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    resizeImage();
 }
 
 void Display::loadTexture(int width, int height, uint8_t *data)
@@ -89,42 +91,60 @@ void Display::renderFrame()
 {
     glClearColor(0,0,0,1);
     glClear(GL_COLOR_BUFFER_BIT);
-
+    
     glBindTexture(GL_TEXTURE_2D, texture);
 
     shader.use();
     glBindVertexArray(VAO);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
+    if(menuCallbackFun) //Skips if NULL
+        menuCallbackFun();
+
     SDL_GL_SwapWindow(window);
 }
 
 void Display::resizeImage()
 {
-    int winWidth, winHeight;
-    float wRatio, hRatio;
+    int winWidth, winHeight, viewWidth, viewHeight, viewX, viewY;
     SDL_GL_GetDrawableSize(window, &winWidth, &winHeight);
 
-    if((float)textureWidth/textureHeight > (float)winWidth/winHeight) { //Window taller
-        wRatio = 1.0f;
-        hRatio = ((float)winWidth/winHeight) / ((float)textureWidth/textureHeight);
+    if((float)winWidth/(winHeight - menuBarHeight) > (float)textureWidth/textureHeight) { //Usable window wider than game display
+        viewHeight = winHeight - menuBarHeight;
+        viewY = 0;
+        viewWidth = (float)textureWidth/textureHeight * viewHeight;
+        viewX = (winWidth - viewWidth) / 2;
     }
-    else { //Window wider
-        hRatio = 1.0f;
-        wRatio = ((float)textureWidth/textureHeight) / ((float)winWidth/winHeight);
+    else { //Window taller than game display
+        viewWidth = winWidth;
+        viewX = 0;
+        viewHeight = (float)textureHeight/textureWidth * viewWidth;
+        viewY = (winHeight - menuBarHeight - viewHeight) / 2;
     }
-
-    vertices[0] = vertices[5] = wRatio;
-    vertices[10] = vertices[15] = -wRatio;
-    vertices[1] = vertices[16] = hRatio;
-    vertices[6] = vertices[11] = -hRatio;
-
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    glViewport(0, 0, winWidth, winHeight);
+    glViewport(viewX, viewY, viewWidth, viewHeight);
 }
 
 uint32_t Display::getWindowID()
 {
     return SDL_GetWindowID(window);
+}
+
+SDL_Window *Display::getWindow()
+{
+    return window;
+}
+
+SDL_GLContext Display::getContext()
+{
+    return gl_context;
+}
+
+void Display::setMenuBarHeight(int height)
+{
+    menuBarHeight = height;
+}
+
+void Display::setMenuCallback(std::function<void()> callbackFun)
+{
+    menuCallbackFun = callbackFun;
 }

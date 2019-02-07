@@ -31,6 +31,8 @@ include_directories("${GLAD_DIR}/include")
 set(GLM_DIR "C:/dev_libs/GLM")
 include_directories("${GLM_DIR}/include")
 
+add_compile_definitions(IMGUI_IMPL_OPENGL_LOADER_GLAD)
+
 #Use bin folder for output
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
@@ -56,6 +58,11 @@ target_sources(plainNES PRIVATE
                 src/Mapper/mapper2.cpp
                 src/Mapper/mapper3.cpp
                 src/Mapper/mapper4.cpp
+                src/imgui/imgui.cpp
+                src/imgui/imgui_draw.cpp
+                src/imgui/imgui_widgets.cpp
+                src/imgui/imgui_impl_opengl3.cpp
+                src/imgui/imgui_impl_sdl.cpp
                )
 
 target_link_libraries(plainNES mingw32 SDL2 SDL2main ${SDL2_TTF_LIBRARIES} ${Boost_LIBRARIES} "glad" ${OPENGL_gl_LIBRARY})
