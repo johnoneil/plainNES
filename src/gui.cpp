@@ -11,6 +11,8 @@
 #include <array>
 #include <vector>
 #include <iostream>
+#include <windows.h>
+#include <commdlg.h>
 
 namespace GUI {
 
@@ -420,7 +422,7 @@ void _drawmainMenuBar() {
 		}
 		if (ImGui::BeginMenu("Speed"))
 		{
-			ImGui::MenuItem("100%%", NULL, &menu_emu_speed100);
+			ImGui::MenuItem("100%", NULL, &menu_emu_speed100);
 			ImGui::MenuItem("Max (No Audio)", NULL, &menu_emu_speedmax);
 			ImGui::EndMenu();
 		}
@@ -443,7 +445,24 @@ void _drawmainMenuBar() {
 
 void onOpenFile()
 {
-    std::cout << "Open file" << std::endl;
+    char filename[ MAX_PATH ];
+
+    OPENFILENAME ofn;
+        ZeroMemory( &filename, sizeof( filename ) );
+        ZeroMemory( &ofn,      sizeof( ofn ) );
+        ofn.lStructSize  = sizeof( ofn );
+        ofn.hwndOwner    = NULL;  // If you have a window to center over, put its HANDLE here
+        ofn.lpstrFilter  = "iNES ROM Files\0*.nes\0Any File\0*.*\0";
+        ofn.lpstrFile    = filename;
+        ofn.nMaxFile     = MAX_PATH;
+        ofn.lpstrTitle   = "Select a ROM to load";
+        ofn.Flags        = OFN_DONTADDTORECENT | OFN_FILEMUSTEXIST;
+    
+    if (GetOpenFileNameA( &ofn ))
+    {
+        NES::loadROM(filename);
+        NES::powerOn();
+    }
 }
 
 void onQuit()

@@ -65,7 +65,7 @@ target_sources(plainNES PRIVATE
                 src/imgui/imgui_impl_sdl.cpp
                )
 
-target_link_libraries(plainNES mingw32 SDL2 SDL2main ${SDL2_TTF_LIBRARIES} ${Boost_LIBRARIES} "glad" ${OPENGL_gl_LIBRARY})
+target_link_libraries(plainNES mingw32 SDL2 SDL2main ${SDL2_TTF_LIBRARIES} ${Boost_LIBRARIES} "glad" ${OPENGL_gl_LIBRARY} comdlg32)
 
 #Copy over Resources folder into bin
 add_custom_command(TARGET plainNES POST_BUILD
