@@ -40,13 +40,6 @@ bool quit = false;
 bool LctrlPressed = false;
 bool RctrlPressed = false;
 
-void setOptions(int options)
-{
-    showFPS = (options & DISPLAY_FPS) > 0;
-    debugPPU = (options & PPU_DEBUG) > 0;
-    disableAudio = (options & DISABLE_AUDIO) > 0;
-}
-
 int init()
 {
     RENDER::init();
@@ -77,7 +70,7 @@ int init()
         return 1;
     }
 
-    mainpixelMap.fill(0x000000FF);
+    mainpixelMap.fill(0);
     mainDisplay.loadTexture(SCREEN_WIDTH, SCREEN_HEIGHT, mainpixelMap.data());
 
     return 0;
@@ -284,7 +277,11 @@ void update()
 }
 
 void updateMainWindow() {
-    RENDER::convertNTSC2RGB(mainpixelMap.data(), NES::getPixelMap(), SCREEN_WIDTH*SCREEN_HEIGHT*3);
+    if(NES::romLoaded)
+        RENDER::convertNTSC2RGB(mainpixelMap.data(), NES::getPixelMap(), SCREEN_WIDTH*SCREEN_HEIGHT*3);
+    else
+        mainpixelMap.fill(0);
+    
     mainDisplay.loadTexture(SCREEN_WIDTH, SCREEN_HEIGHT, mainpixelMap.data());
 
     mainDisplay.renderFrame();
@@ -472,12 +469,12 @@ void onQuit()
 
 void onEmuRun()
 {
-    std::cout << "Run" << std::endl;
+    NES::pause(false);
 }
 
 void onEmuPause()
 {
-    std::cout << "Pause" << std::endl;
+    NES::pause(true);
 }
 
 //void onEmuStep()

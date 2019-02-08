@@ -43,6 +43,7 @@ target_sources(plainNES PRIVATE
                 src/apu.cpp
                 src/cpu.cpp
                 src/display.cpp
+                src/emulator.cpp
                 src/gamepak.cpp
                 src/gui.cpp
                 src/io.cpp

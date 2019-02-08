@@ -22,19 +22,17 @@ uint16_t PC_debug_start = 0;
 std::ofstream logFile;
 
 bool running = false;
+bool romLoaded = false;
 
-void setOptions(int options)
+void enableLogging()
 {
-    logging = (options & LOGGING) > 0;
-    PC_debug_start_flag = (options & SET_PC_START) > 0;
-
-    if(logging) {
-		logFile.open("log.txt",std::ios::trunc);
-	}
+    logging = true;
+	logFile.open("log.txt",std::ios::trunc);
 }
 
 int loadROM(std::string filename)
 {
+    romLoaded = false;
     std::ifstream file(filename, std::ios::binary);
     if(file.fail()) {
         std::cerr << "Unable to open file" << std::endl;
@@ -44,6 +42,7 @@ int loadROM(std::string filename)
 		return 1;
 	}
 	file.close();
+    romLoaded = true;
     return 0;
 }
 
@@ -69,12 +68,30 @@ void reset()
     APU::reset();
 }
 
+void pause(bool enable)
+{
+    running = !enable;
+}
+
 void frameStep()
 {
-    while(PPU::isframeReady() == 0) {
-		CPU::step();
-	}
-    PPU::setframeReady(false);
+    if(running) {
+        while(PPU::isframeReady() == 0) {
+            CPU::step();
+        }
+        PPU::setframeReady(false);
+    }
+}
+
+void setDebugPC(bool enable, uint16_t debugPC)
+{
+    if(enable) {
+        PC_debug_start_flag = true;
+        PC_debug_start = debugPC;
+    }
+    else
+        PC_debug_start_flag = false;
+    
 }
 
 uint8_t getPalette(uint16_t addr) {
