@@ -41,13 +41,14 @@ void onOpenFile();
 void onQuit();
 void onEmuRun();
 void onEmuPause();
-//void onEmuStep();
+void onEmuStep();
 void onEmuPower();
 void onEmuReset();
 void onEmuSpeed(int pct);
 void onEmuSpeedMax();
 void onShowFPS();
 void onDebugWindow();
+void onGetFrameInfo();
 
 
 }

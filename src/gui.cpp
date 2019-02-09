@@ -7,6 +7,7 @@
 #include "imgui/imgui_impl_opengl3.h"
 #include <SDL.h>
 #include <glad/glad.h>
+#include <boost/crc.hpp>
 #include <cstring>
 #include <array>
 #include <vector>
@@ -369,13 +370,14 @@ void _drawmainMenuBar() {
     //static bool menu_configInput = false;
 	static bool menu_showFPS = false;
 	static bool menu_debugWindow = false;
+    static bool menu_get_frameInfo = false;
 	//static std::map<std::string, bool> menu_open_recent;
 	
 	if(menu_open_file){ onOpenFile(); menu_open_file = false; }
 	if(menu_quit){ onQuit(); menu_quit = false; }
 	if(menu_emu_run){ onEmuRun(); menu_emu_run = false; }
 	if(menu_emu_pause){ onEmuPause(); menu_emu_pause = false; }
-	//if(menu_emu_step){ onEmuStep(); menu_emu_step = false; }
+	if(menu_emu_step){ onEmuStep(); menu_emu_step = false; }
 	if(menu_emu_power){ onEmuPower(); menu_emu_power = false; }
 	if(menu_emu_reset){ onEmuReset(); menu_emu_reset = false; }
 	if(menu_emu_speed100){ onEmuSpeed(100); menu_emu_speed100 = false; }
@@ -383,6 +385,7 @@ void _drawmainMenuBar() {
     //if(menu_configInput){ onConfigInput(); menu_configInput = false; }
 	if(menu_showFPS){ onShowFPS(); menu_showFPS = false; }
 	if(menu_debugWindow){ onDebugWindow(); menu_debugWindow = false; }
+    if(menu_get_frameInfo){ onGetFrameInfo(); menu_get_frameInfo = false; }
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL2_NewFrame(mainDisplay.getWindow());
@@ -411,7 +414,7 @@ void _drawmainMenuBar() {
 		{
 			ImGui::MenuItem("Run", NULL, &menu_emu_run);
 			ImGui::MenuItem("Pause", NULL, &menu_emu_pause);
-			//ImGui::MenuItem("Step", NULL, &menu_emu_step);
+			ImGui::MenuItem("Next Frame", NULL, &menu_emu_step);
 			ImGui::Separator();
 			ImGui::MenuItem("Power", NULL, &menu_emu_power);
 			ImGui::MenuItem("Reset", NULL, &menu_emu_reset);
@@ -428,6 +431,7 @@ void _drawmainMenuBar() {
             //ImGui::MenuItem("Configure Input", NULL, &menu_configInput);
 			ImGui::MenuItem("Show FPS", NULL, &menu_showFPS);
 			ImGui::MenuItem("Debug Window", NULL, &menu_debugWindow, false);
+            ImGui::MenuItem("Get Frame Info", NULL, &menu_get_frameInfo);
 			ImGui::EndMenu();
 		}
         if(showFPS) {
@@ -477,10 +481,11 @@ void onEmuPause()
     NES::pause(true);
 }
 
-//void onEmuStep()
-//{
-//    std::cout << "Step" << std::endl;
-//}
+void onEmuStep()
+{
+    NES::pause(true);
+    NES::frameStep(true);
+}
 
 void onEmuPower()
 {
@@ -510,6 +515,15 @@ void onShowFPS()
 void onDebugWindow()
 {
     //TODO get debug window working
+}
+
+void onGetFrameInfo()
+{
+    boost::crc_optimal<32, 0x04C11DB7, 0xFFFFFFFF, 0xFFFFFFFF, true, true> CRC32;
+    uint8_t *screenOutput = NES::getPixelMap();
+    CRC32.reset();
+    CRC32.process_bytes(screenOutput, 240*256);
+    std::cout << "FrameNum: " << std::dec << NES::getFrameNum() << " CRC: 0x" << std::hex << (int)CRC32.checksum() << std::endl;
 }
 
 

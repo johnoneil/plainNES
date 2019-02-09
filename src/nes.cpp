@@ -73,9 +73,9 @@ void pause(bool enable)
     running = !enable;
 }
 
-void frameStep()
+void frameStep(bool force)
 {
-    if(running) {
+    if(running || force) {
         while(PPU::isframeReady() == 0) {
             CPU::step();
         }
@@ -92,6 +92,11 @@ void setDebugPC(bool enable, uint16_t debugPC)
     else
         PC_debug_start_flag = false;
     
+}
+
+unsigned long getFrameNum()
+{
+    return PPU::frame;
 }
 
 uint8_t getPalette(uint16_t addr) {
