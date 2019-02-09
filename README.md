@@ -5,7 +5,7 @@ The emulator is still a work in progress, but can already run a variety of games
 
 The current version has a fully functional CPU, including unofficial opcodes. Main PPU functionality is fully implemented, with some timing and obscure behavior still in work. The APU works, with some audio glitches.
 
-Unit testing is perfomed with the Catch2 library, and tests against many of the test ROMs listed on the [NESDev Wiki](https://wiki.nesdev.com/w/index.php/Emulator_tests)
+Unit testing is performed with the Catch2 library, and tests against many of the test ROMs listed on the [NESDev Wiki](https://wiki.nesdev.com/w/index.php/Emulator_tests)
 
 ## Screenshots
 ![castlevania_rs](https://user-images.githubusercontent.com/3280380/52517364-6f89f100-2bef-11e9-91b7-e19334bca2cd.PNG)
