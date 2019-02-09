@@ -44,7 +44,7 @@ void Mapper0::memSet(uint16_t addr, uint8_t val)
 		PRGRAM.at(addr - 0x6000) = val;
 	}
 	else {
-		std::cerr << "Invalid write attempt to " << int_to_hex(addr) << std::endl;
+		//std::cerr << "Invalid write attempt to " << int_to_hex(addr) << std::endl;
 	}
     return;
 }
