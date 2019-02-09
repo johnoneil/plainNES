@@ -26,8 +26,7 @@ extern bool quit;
 
 void setOptions(int options);
 int init();
-int initMainWindow();
-int initPPUWindow();
+//int initPPUWindow();
 int initAudio();
 void update();
 void updateMainWindow();
@@ -36,5 +35,20 @@ void updateAudio();
 void fill_audio_buffer(void *user_data, uint8_t *out, int byte_count);
 void close();
 void downsample(int16_t *output, float *input, int &size);
+
+void _drawmainMenuBar();
+void onOpenFile();
+void onQuit();
+void onEmuRun();
+void onEmuPause();
+void onEmuStep();
+void onEmuPower();
+void onEmuReset();
+void onEmuSpeed(int pct);
+void onEmuSpeedMax();
+void onShowFPS();
+void onDebugWindow();
+void onGetFrameInfo();
+
 
 }

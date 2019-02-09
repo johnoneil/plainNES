@@ -24,18 +24,22 @@ struct AudioBuffer {
 extern AudioBuffer rawAudio;
 extern std::array<uint8_t, 2> controller_state;
 
-extern bool running;
+extern bool running, romLoaded;
 
 extern bool logging;
 extern uint16_t PC_debug_start;
 extern std::ofstream logFile;
 
-void setOptions(int options);
+void enableLogging();
 int loadROM(std::string filename);
 void powerOn();
 void reset();
-void frameStep();
+void pause(bool enable);
+void frameStep(bool force = false);
 
+void setDebugPC(bool enable, uint16_t debugPC = 0);
+
+unsigned long getFrameNum();
 uint8_t getPalette(uint16_t addr);
 uint8_t* getPixelMap();
 std::array<std::array<uint8_t, 16*16*64>, 2> getPatternTableBuffers();

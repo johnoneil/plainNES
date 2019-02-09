@@ -11,7 +11,7 @@ namespace PPU {
 unsigned int scanline, dot; //Dots are also called cycles and can be considered the pixel column
 unsigned long frame;
 unsigned long long ppuClock;
-std::array<uint8_t, 240*256> pixelMap;
+std::array<uint8_t, 240*256> pixelMap = {0};
 bool frameReady;
 
 

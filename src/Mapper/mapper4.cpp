@@ -274,7 +274,7 @@ void Mapper4::PPUstep()
     uint8_t A12now = ((PPU::addressBus & 0x1000) > 0) ? 1 : 0;
     if(A12low && A12now > 0) {
         //Rising edge of A12
-        std::cout << "Clock: " << PPU::scanline << ":" << PPU::dot << std::endl;
+        //std::cout << "Clock: " << PPU::scanline << ":" << PPU::dot << std::endl;
         A12low = false;
         if(M2cntr >= 2) {
             M2cntr = 0;

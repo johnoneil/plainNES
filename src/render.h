@@ -4,7 +4,7 @@
 
 namespace RENDER {
 
-uint32_t* convertNTSC2ARGB(uint32_t* outputBuffer, uint8_t* inputPixelMap, int size);
+uint8_t* convertNTSC2RGB(uint8_t* outputBuffer, uint8_t* inputPixelMap, int size);
 int init();
 
 }

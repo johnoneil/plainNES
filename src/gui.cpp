@@ -1,37 +1,27 @@
 #include "gui.h"
+#include "display.h"
 #include "nes.h"
 #include "render.h"
+#include "imgui/imgui.h"
+#include "imgui/imgui_impl_sdl.h"
+#include "imgui/imgui_impl_opengl3.h"
 #include <SDL.h>
-#include <SDL_ttf.h>
+#include <glad/glad.h>
+#include <boost/crc.hpp>
 #include <cstring>
 #include <array>
 #include <vector>
 #include <iostream>
+#include <windows.h>
+#include <commdlg.h>
 
 namespace GUI {
 
-SDL_Window *mainwindow;
-SDL_Renderer *mainrenderer;
-SDL_Texture *maintexture;
-SDL_Texture *FPStextTexture;
-SDL_Surface *FPStextSurface;
-SDL_Color FPStextColor = {0};
-TTF_Font *gFont = NULL;
-SDL_Rect textRect;
-char FPStext[20];
-float avgFPS = 0;
-
-SDL_Window *PPUwindow;
-SDL_Renderer *PPUrenderer;
-SDL_Texture *PTtexture0;
-SDL_Texture *PTtexture1;
-SDL_Rect rectPT0, rectPT1;
-std::array<std::array<SDL_Rect, 4>, 8> PaletteRect;
-
+Display mainDisplay;
 SDL_Event event;
 const uint8_t *kbState = SDL_GetKeyboardState(NULL);
 
-std::array<uint32_t, SCREEN_WIDTH * SCREEN_HEIGHT> mainpixelMap;
+std::array<uint8_t, SCREEN_WIDTH * SCREEN_HEIGHT * 3> mainpixelMap;
 std::array<uint32_t, 16*8 * 16*8> PTpixelMap;
 
 //Ratio between APU sample rate and emulator sample rate isn't a
@@ -51,81 +41,43 @@ bool quit = false;
 bool LctrlPressed = false;
 bool RctrlPressed = false;
 
-void setOptions(int options)
-{
-    showFPS = (options & DISPLAY_FPS) > 0;
-    debugPPU = (options & PPU_DEBUG) > 0;
-    disableAudio = (options & DISABLE_AUDIO) > 0;
-}
-
 int init()
 {
     RENDER::init();
 
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_NOPARACHUTE) < 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize SDL: %s", SDL_GetError());
         return 1;
     }
 
-    if(TTF_Init() == -1) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "TTF_Init: %s\n", TTF_GetError());
-        return 1;
-    }
+    int expectedMenuBarSize = 19;
+    mainDisplay.init(SCREEN_WIDTH*SCREEN_SCALE, SCREEN_HEIGHT*SCREEN_SCALE + expectedMenuBarSize, "plainNES", "texture.vert", "texture.frag");
 
-    if(initMainWindow()) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize Main Window: %s", SDL_GetError());
-        return 1;
-    }
+    // Setup imGui context
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
 
-    if(debugPPU) {
-        if(initPPUWindow()) {
-            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize Main Window: %s", SDL_GetError());
-            return 1;
-        }
-    }
+    // Setup imGui style
+    ImGui::StyleColorsDark();
+
+    // Setup Platform/Renderer bindings
+    ImGui_ImplSDL2_InitForOpenGL(mainDisplay.getWindow(), mainDisplay.getContext());
+    ImGui_ImplOpenGL3_Init("#version 330");
+
+    mainDisplay.setMenuCallback(_drawmainMenuBar);
 
     if(initAudio()) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize Audio: %s", SDL_GetError());
         return 1;
     }
 
-    gFont = TTF_OpenFont( "Roboto-Regular.ttf", 12 );
-    if( gFont == NULL )
-    {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to load font! SDL_ttf Error: %s\n", TTF_GetError() );
-        return 1;
-    }
+    mainpixelMap.fill(0);
+    mainDisplay.loadTexture(SCREEN_WIDTH, SCREEN_HEIGHT, mainpixelMap.data());
 
     return 0;
 }
 
-int initMainWindow() {
-    mainwindow = SDL_CreateWindow("plainNES",
-                SDL_WINDOWPOS_UNDEFINED,
-                SDL_WINDOWPOS_UNDEFINED,
-                SCREEN_WIDTH*SCREEN_SCALE,SCREEN_HEIGHT*SCREEN_SCALE,
-                0);
-    
-    mainrenderer = SDL_CreateRenderer(mainwindow, -1, 0);
-    SDL_RenderSetScale(mainrenderer, SCREEN_SCALE, SCREEN_SCALE);
-    maintexture = SDL_CreateTexture(mainrenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, SCREEN_WIDTH, SCREEN_HEIGHT);
-
-    for(int i=0; i<SCREEN_WIDTH*SCREEN_HEIGHT; ++i) {
-        mainpixelMap[i] = 0xFF000000;
-    }
-
-    FPStextColor.r = 255;
-    FPStextColor.g = 0;
-    FPStextColor.b = 0;
-
-    SDL_UpdateTexture(maintexture, NULL, mainpixelMap.data(), SCREEN_WIDTH*4);
-    SDL_RenderCopy(mainrenderer, maintexture, NULL, NULL);
-    SDL_RenderPresent(mainrenderer);
-
-    return 0;
-}
-
-int initPPUWindow() {
+/*int initPPUWindow() {
     PPUwindow = SDL_CreateWindow("plainNES - PPU Debugging",
                 50, 50,
                 (32*8 + 62 + 4 + 4)*SCREEN_SCALE,(16*8 + 4)*SCREEN_SCALE,
@@ -187,7 +139,7 @@ int initPPUWindow() {
     SDL_RenderPresent(PPUrenderer);
 
     return 0;
-}
+}*/
 
 int initAudio() {
     audio_rb_idx = 0;
@@ -223,8 +175,13 @@ void update()
 {  
     while( SDL_PollEvent(&event) != 0) {
         if(event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE) {
-            quit = true;
+            if(event.window.windowID == mainDisplay.getWindowID())
+                quit = true;
             return;
+        }
+        else if(event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+            if(event.window.windowID == mainDisplay.getWindowID())
+                mainDisplay.resizeImage();
         }
         else if(event.type == SDL_KEYDOWN)
         {
@@ -310,38 +267,28 @@ void update()
 
     //Update controller 2 keypresses
     NES::controller_state[1] = 0;
-
+    
     updateMainWindow();
-    if(debugPPU) {
-        updatePPUWindow();
-    }
+    //if(debugPPU) {
+    //    updatePPUWindow();
+    //}
     if(disableAudio == false)
         updateAudio();
 
 }
 
 void updateMainWindow() {
-    RENDER::convertNTSC2ARGB(mainpixelMap.data(), NES::getPixelMap(), SCREEN_WIDTH*SCREEN_HEIGHT);
+    if(NES::romLoaded)
+        RENDER::convertNTSC2RGB(mainpixelMap.data(), NES::getPixelMap(), SCREEN_WIDTH*SCREEN_HEIGHT*3);
+    else
+        mainpixelMap.fill(0);
+    
+    mainDisplay.loadTexture(SCREEN_WIDTH, SCREEN_HEIGHT, mainpixelMap.data());
 
-    SDL_UpdateTexture(maintexture, NULL, mainpixelMap.data(), SCREEN_WIDTH*4);
-    SDL_RenderCopy(mainrenderer, maintexture, NULL, NULL);
-
-    //FPS text
-    if(showFPS) {
-        snprintf(FPStext, sizeof(FPStext), "%.2f", avgFPS);
-        FPStextSurface = TTF_RenderText_Blended( gFont, FPStext, FPStextColor );
-        textRect.w = FPStextSurface->w;
-        textRect.h = FPStextSurface->h;
-        textRect.x = SCREEN_WIDTH-textRect.w;
-        textRect.y = 0;
-        FPStextTexture = SDL_CreateTextureFromSurface(mainrenderer, FPStextSurface);
-        SDL_RenderCopy(mainrenderer, FPStextTexture, NULL, &textRect);
-    }
-
-    SDL_RenderPresent(mainrenderer);
+    mainDisplay.renderFrame();
 }
 
-void updatePPUWindow() {
+/*void updatePPUWindow() {
     std::array<std::array<uint8_t, 16*16*64>, 2> PTarrays = NES::getPatternTableBuffers();
     RENDER::convertNTSC2ARGB(PTpixelMap.data(), PTarrays[0].data(), PTarrays[0].size());
     SDL_UpdateTexture(PTtexture0, NULL, PTpixelMap.data(), 16*8*4);
@@ -368,7 +315,7 @@ void updatePPUWindow() {
     }
 
     SDL_RenderPresent(PPUrenderer);
-}
+}*/
 
 void updateAudio() {
     //Currently downsample using nearest neighbor method
@@ -410,10 +357,180 @@ void fill_audio_buffer(void *user_data, uint8_t *out, int byte_count) {
     }
 }
 
+void _drawmainMenuBar() {
+	static bool menu_open_file = false;
+	static bool menu_quit = false;
+	static bool menu_emu_run = false;
+	static bool menu_emu_pause = false;
+	static bool menu_emu_step = false;
+	static bool menu_emu_power = false;
+	static bool menu_emu_reset = false;
+	static bool menu_emu_speed100 = false;
+	static bool menu_emu_speedmax = false;
+    //static bool menu_configInput = false;
+	static bool menu_showFPS = false;
+	static bool menu_debugWindow = false;
+    static bool menu_get_frameInfo = false;
+	//static std::map<std::string, bool> menu_open_recent;
+	
+	if(menu_open_file){ onOpenFile(); menu_open_file = false; }
+	if(menu_quit){ onQuit(); menu_quit = false; }
+	if(menu_emu_run){ onEmuRun(); menu_emu_run = false; }
+	if(menu_emu_pause){ onEmuPause(); menu_emu_pause = false; }
+	if(menu_emu_step){ onEmuStep(); menu_emu_step = false; }
+	if(menu_emu_power){ onEmuPower(); menu_emu_power = false; }
+	if(menu_emu_reset){ onEmuReset(); menu_emu_reset = false; }
+	if(menu_emu_speed100){ onEmuSpeed(100); menu_emu_speed100 = false; }
+	if(menu_emu_speedmax){ onEmuSpeedMax(); menu_emu_speedmax = false; }
+    //if(menu_configInput){ onConfigInput(); menu_configInput = false; }
+	if(menu_showFPS){ onShowFPS(); menu_showFPS = false; }
+	if(menu_debugWindow){ onDebugWindow(); menu_debugWindow = false; }
+    if(menu_get_frameInfo){ onGetFrameInfo(); menu_get_frameInfo = false; }
+
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplSDL2_NewFrame(mainDisplay.getWindow());
+    ImGui::NewFrame();
+
+	if (ImGui::BeginMainMenuBar())
+	{
+		mainDisplay.setMenuBarHeight(ImGui::GetWindowHeight());
+		if (ImGui::BeginMenu("File"))
+		{	
+			ImGui::MenuItem("Open", NULL, &menu_open_file);
+            //TODO Implement recently opened. Would need an ini type file created most likely
+			/*if (ImGui::BeginMenu("Recent"))
+			{
+				for(item : menu_open_recent)
+				{
+					ImGui::MenuItem(item[0], NULL, &item[1]);
+				}
+				ImGui::EndMenu();
+			}
+			*/
+			ImGui::MenuItem("Quit", NULL, &menu_quit);
+			ImGui::EndMenu();
+		}
+		if (ImGui::BeginMenu("Emulator"))
+		{
+			ImGui::MenuItem("Run", NULL, &menu_emu_run);
+			ImGui::MenuItem("Pause", NULL, &menu_emu_pause);
+			ImGui::MenuItem("Next Frame", NULL, &menu_emu_step);
+			ImGui::Separator();
+			ImGui::MenuItem("Power", NULL, &menu_emu_power);
+			ImGui::MenuItem("Reset", NULL, &menu_emu_reset);
+			ImGui::EndMenu();
+		}
+		if (ImGui::BeginMenu("Speed"))
+		{
+			ImGui::MenuItem("100%", NULL, &menu_emu_speed100);
+			ImGui::MenuItem("Max (No Audio)", NULL, &menu_emu_speedmax);
+			ImGui::EndMenu();
+		}
+		if (ImGui::BeginMenu("Options"))
+		{
+            //ImGui::MenuItem("Configure Input", NULL, &menu_configInput);
+			ImGui::MenuItem("Show FPS", NULL, &menu_showFPS);
+			ImGui::MenuItem("Debug Window", NULL, &menu_debugWindow, false);
+            ImGui::MenuItem("Get Frame Info", NULL, &menu_get_frameInfo);
+			ImGui::EndMenu();
+		}
+        if(showFPS) {
+            std::string FPStext = "FPS: " + std::to_string(ImGui::GetIO().Framerate);
+            ImGui::TextColored(ImColor(255,100,100), FPStext.c_str());
+        }
+		ImGui::EndMainMenuBar();
+	}
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
+void onOpenFile()
+{
+    char filename[ MAX_PATH ];
+
+    OPENFILENAME ofn;
+        ZeroMemory( &filename, sizeof( filename ) );
+        ZeroMemory( &ofn,      sizeof( ofn ) );
+        ofn.lStructSize  = sizeof( ofn );
+        ofn.hwndOwner    = NULL;  // If you have a window to center over, put its HANDLE here
+        ofn.lpstrFilter  = "iNES ROM Files\0*.nes\0Any File\0*.*\0";
+        ofn.lpstrFile    = filename;
+        ofn.nMaxFile     = MAX_PATH;
+        ofn.lpstrTitle   = "Select a ROM to load";
+        ofn.Flags        = OFN_DONTADDTORECENT | OFN_FILEMUSTEXIST;
+    
+    if (GetOpenFileNameA( &ofn ))
+    {
+        NES::loadROM(filename);
+        NES::powerOn();
+    }
+}
+
+void onQuit()
+{
+    quit = true;
+}
+
+void onEmuRun()
+{
+    NES::pause(false);
+}
+
+void onEmuPause()
+{
+    NES::pause(true);
+}
+
+void onEmuStep()
+{
+    NES::pause(true);
+    NES::frameStep(true);
+}
+
+void onEmuPower()
+{
+    NES::powerOn();
+}
+
+void onEmuReset()
+{
+    NES::reset();
+}
+
+void onEmuSpeed(int pct)
+{
+    disableAudio = false;
+}
+
+void onEmuSpeedMax()
+{
+    disableAudio = true;
+}
+
+void onShowFPS()
+{
+    showFPS = !showFPS;
+}
+
+void onDebugWindow()
+{
+    //TODO get debug window working
+}
+
+void onGetFrameInfo()
+{
+    boost::crc_optimal<32, 0x04C11DB7, 0xFFFFFFFF, 0xFFFFFFFF, true, true> CRC32;
+    uint8_t *screenOutput = NES::getPixelMap();
+    CRC32.reset();
+    CRC32.process_bytes(screenOutput, 240*256);
+    std::cout << "FrameNum: " << std::dec << NES::getFrameNum() << " CRC: 0x" << std::hex << (int)CRC32.checksum() << std::endl;
+}
+
+
 void close()
 {
-    SDL_DestroyWindow(mainwindow);
-    SDL_DestroyWindow(PPUwindow);
+    delete &mainDisplay;
+    //SDL_DestroyWindow(PPUwindow);
     SDL_CloseAudioDevice(1);
     SDL_Quit();
     return;

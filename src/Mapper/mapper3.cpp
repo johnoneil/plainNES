@@ -73,7 +73,7 @@ void Mapper3::PPUmemSet(uint16_t addr, uint8_t val)
 	addr %= 0x4000;
 	if(addr < 0x2000) {
 		//CHRROM not writable
-		std::cerr << "Invalid write attempt to " << int_to_hex(addr) << std::endl;
+		//std::cerr << "Invalid write attempt to " << int_to_hex(addr) << std::endl;
 	}
 	else if(addr < 0x3F00) {
 		addr = 0x2000 + addr % 0x1000;
