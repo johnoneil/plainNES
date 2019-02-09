@@ -29,5 +29,6 @@ uint8_t* getPixelMap();
 std::array<std::array<uint8_t, 16*16*64>, 2> getPatternTableBuffers();
 bool isframeReady();
 void setframeReady(bool set);
+void setBusAddr(uint16_t addr);
 
 }

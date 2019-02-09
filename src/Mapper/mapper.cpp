@@ -10,3 +10,4 @@ void Mapper::powerOn() {};
 void Mapper::reset() {};
 void Mapper::CPUstep() {};
 void Mapper::PPUstep() {};
+void Mapper::PPUbusAddrChanged(uint16_t newAddr) {};

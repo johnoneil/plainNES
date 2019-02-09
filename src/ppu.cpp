@@ -39,7 +39,7 @@ uint8_t fineXscroll;	//x in nesdev wiki
 bool writeToggle;		//w in nesdev wiki
 uint16_t BGtiledata_upper, BGtiledata_lower;
 uint8_t BGattri_upper, BGattri_lower;
-uint16_t addressBus;
+uint16_t busAddress;
 
 //Background latches and shift registers
 uint8_t NTlatch, ATlatch, BGLlatch, BGHlatch;
@@ -236,6 +236,7 @@ uint8_t regGet(uint16_t addr, bool peek)
 			if(peek == false) {
 				if(incrementMode == 0) ++currVRAM_addr.value;
 				else currVRAM_addr.value += 32;
+				setBusAddr(currVRAM_addr.value);
 				ioBus = data;
 			}
 			else
@@ -327,7 +328,7 @@ void regSet(uint16_t addr, uint8_t val)
 				//tempVRAM_addr = (tempVRAM_addr & 0xFF00) | val;
 				writeToggle = false;
 				currVRAM_addr.value = tempVRAM_addr.value;
-				addressBus = currVRAM_addr.value;
+				setBusAddr(currVRAM_addr.value);
 			}
 			break;
 
@@ -336,6 +337,7 @@ void regSet(uint16_t addr, uint8_t val)
 			GAMEPAK::PPUmemSet(currVRAM_addr.value, val);
 			if(incrementMode == 0) ++currVRAM_addr.value;
 			else currVRAM_addr.value += 32;
+			setBusAddr(currVRAM_addr.value);
 			break;
 		default:
 			std::cout << "Invalid PPU register access" << std::endl;
@@ -514,7 +516,8 @@ void spriteEval()
 					//Check if flipped vertically
 					if((spriteL[sprNum] & 0x80) > 0) yPos = 7 - yPos;
 					sprAddr = (sprAddr << 4) + yPos;
-					if(spriteTileSel) sprAddr += 0x1000;
+					if(spriteTileSel) sprAddr |= 0x1000;
+					else sprAddr &= 0xEFFF;
 				}
 				else { //8x16 bit sprite
 					if((spriteL[sprNum] & 0x80) > 0) yPos = 15 - yPos;
@@ -522,7 +525,7 @@ void spriteEval()
 						sprAddr <<= 4;
 					}
 					else {
-						sprAddr = ((sprAddr & 0xFE) << 4) + 0x1000;
+						sprAddr = ((sprAddr & 0xFE) << 4) | 0x1000;
 					}
 					if(yPos > 7) {
 						sprAddr += 16;
@@ -702,5 +705,9 @@ void setframeReady(bool set) {
 	frameReady = set;
 }
 
+void setBusAddr(uint16_t addr) {
+	busAddress = addr;
+	GAMEPAK::PPUbusAddrChanged(addr);
+}
 
 }

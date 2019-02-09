@@ -75,5 +75,7 @@ void CPUmemSet(uint16_t addr, uint8_t val);
 uint8_t PPUmemGet(uint16_t addr, bool peek = false);
 void PPUmemSet(uint16_t addr, uint8_t val);
 
+void PPUbusAddrChanged(uint16_t newAddr);
+
 
 } //GAMEPAK

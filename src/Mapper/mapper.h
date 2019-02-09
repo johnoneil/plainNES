@@ -29,5 +29,8 @@ class Mapper {
     //For mappers which react to clock signals or other systems
     virtual void CPUstep(); //Occurs every CPU step
     virtual void PPUstep(); //Occurs every PPU step
+
+    //For mappers which react to changes to A12 or other signals
+    virtual void PPUbusAddrChanged(uint16_t newAddr);
 };
 

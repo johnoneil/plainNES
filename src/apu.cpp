@@ -304,10 +304,7 @@ void step()
 
     mixOutput();
 
-    if(frameInterruptRequest || DMCinterruptRequest)
-        CPU::setIRQ(true);
-    else
-        CPU::setIRQ(false);
+    CPU::setIRQfromAPU(frameInterruptRequest || DMCinterruptRequest);
     
     cycle++;
 }

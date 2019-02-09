@@ -87,6 +87,7 @@ void Mapper4::memSet(uint16_t addr, uint8_t val)
         if(addr % 2 == 0) { //Even
             IRQenabled = false;
             IRQrequested = false;
+            CPU::setIRQfromCart(IRQrequested);
         }
         else { //Odd
             IRQenabled = true;
@@ -96,7 +97,7 @@ void Mapper4::memSet(uint16_t addr, uint8_t val)
 
 uint8_t Mapper4::PPUmemGet(uint16_t addr, bool peek)
 {
-    PPU::addressBus = addr;
+    PPUbusAddrChanged(addr % 0x3FFF);
 	try {
     //Mirror addresses higher than 0x3FFF
 	addr %= 0x4000;
@@ -163,6 +164,7 @@ uint8_t Mapper4::PPUmemGet(uint16_t addr, bool peek)
 
 void Mapper4::PPUmemSet(uint16_t addr, uint8_t val)
 {
+    PPUbusAddrChanged(addr % 0x3FFF);
 	try {
     //Mirror addresses higher than 0x3FFF
 	addr %= 0x4000;
@@ -266,32 +268,30 @@ void Mapper4::powerOn()
 void Mapper4::CPUstep()
 {
     //M2 rises and falls every CPU cycle
-    ++M2cntr;
+    //if((lastVRAMaddr & 0x1000) == 0)
+    //    ++M2cntr;
 }
 
 void Mapper4::PPUstep()
 {
-    uint8_t A12now = ((PPU::addressBus & 0x1000) > 0) ? 1 : 0;
-    if(A12low && A12now > 0) {
-        //Rising edge of A12
-        //std::cout << "Clock: " << PPU::scanline << ":" << PPU::dot << std::endl;
-        A12low = false;
-        if(M2cntr >= 2) {
-            M2cntr = 0;
-            if(IRQcntr == 0 || IRQreload) {
-                IRQcntr = IRQlatch;
-                IRQreload = false;
-            }
-            else {
-                --IRQcntr;
-            }
-            if(IRQcntr == 0 && IRQenabled) {
-                IRQrequested = true;
-            }
+    CPU::setIRQfromCart(IRQrequested);
+}
+
+void Mapper4::PPUbusAddrChanged(uint16_t newAddr)
+{
+    if((lastVRAMaddr & 0x1000) == 0 && (newAddr & 0x1000) > 0) {
+        std::cout << PPU::scanline << ":" << PPU::dot << " Clocking" << std::endl;
+        if(IRQcntr == 0 || IRQreload) {
+            IRQcntr = IRQlatch;
+            IRQreload = false;
+        }
+        else {
+            --IRQcntr;
+        }
+        if(IRQcntr == 0 && IRQenabled) {
+            IRQrequested = true;
+            CPU::setIRQfromCart(IRQrequested);
         }
     }
-    else if(A12now == 0) {
-        A12low = true;
-    }
-    if(IRQrequested) CPU::setIRQ(true);
+    lastVRAMaddr = newAddr;
 }

@@ -32,6 +32,8 @@ void pollInterrupts();
 void interruptDetect();
 void setNMI(bool setLow);
 void forceNMI(bool setLow);
+void setIRQfromAPU(bool setLow);
+void setIRQfromCart(bool setLow);
 void setIRQ(bool setLow);
 void setPC(uint16_t newPC);
 

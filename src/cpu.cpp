@@ -25,6 +25,7 @@ unsigned long long cpuCycle;
 //bool NMI_line_low, NMI_line_went_low, IRQ_line_low;
 //bool NMI_detected, IRQ_detected;
 //bool NMI_triggered, IRQ_triggered;
+bool IRQfromAPU, IRQfromCart;
 bool NMIflag, IRQflag;
 bool IRQdetected, prevIRQdetected;
 
@@ -164,7 +165,7 @@ void powerOn() {
 	reg.PC = memGet(0xFFFC) | memGet(0xFFFD) << 8;
 	//NMI_line_went_low = NMI_triggered = false;
 	//IRQ_line_low = IRQ_triggered = false;
-	NMIflag = IRQflag = IRQdetected = prevIRQdetected = false;
+	NMIflag = IRQflag = IRQfromAPU = IRQfromCart = IRQdetected = prevIRQdetected = false;
 	cpuCycle = 0;
 	RAM.fill(0);
 }
@@ -178,9 +179,10 @@ void reset() {
 
 void incCycle() {
 	++cpuCycle;
-	interruptDetect();
 	PPU::step();
 	GAMEPAK::PPUstep();
+	// CPU/PPU/APU function actually happens concurrently. Placement of IRQ detect here has had the best results
+	interruptDetect(); 
 	PPU::step();
 	GAMEPAK::PPUstep();
 	PPU::step();
@@ -1203,9 +1205,20 @@ void setNMI(bool setLow) {
 	//NMI_line_low = setLow;
 }
 
+void setIRQfromAPU(bool setLow)
+{
+	IRQfromAPU = setLow;
+	setIRQ(IRQfromAPU | IRQfromCart);
+}
+
+void setIRQfromCart(bool setLow)
+{
+	IRQfromCart = setLow;
+	setIRQ(IRQfromAPU | IRQfromCart);
+}
+
 void setIRQ(bool setLow) {
 	IRQflag = setLow;
-	//IRQ_line_low = setLow;
 }
 
 void OAMDMA_write() {

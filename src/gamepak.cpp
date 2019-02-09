@@ -198,4 +198,9 @@ void PPUmemSet(uint16_t addr, uint8_t val)
 	mapper->PPUmemSet(addr, val);
 }
 
+void PPUbusAddrChanged(uint16_t newAddr)
+{
+	mapper->PPUbusAddrChanged(newAddr);
+}
+
 }

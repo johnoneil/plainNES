@@ -23,7 +23,7 @@ class Mapper4 : public Mapper {
     uint8_t IRQlatch = 0;
     uint8_t IRQcntr = 0;
     uint8_t M2cntr = 0;
-    uint16_t currPPUAddr = 0;
+    uint16_t lastVRAMaddr = 0;
 
     public:
     Mapper4(GAMEPAK::ROMInfo romInfo, std::ifstream &file);
@@ -37,4 +37,6 @@ class Mapper4 : public Mapper {
 
     void CPUstep() override;
     void PPUstep() override;
+
+    void PPUbusAddrChanged(uint16_t newAddr) override;
 };
