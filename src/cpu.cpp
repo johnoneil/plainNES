@@ -26,8 +26,8 @@ unsigned long long cpuCycle;
 //bool NMI_detected, IRQ_detected;
 //bool NMI_triggered, IRQ_triggered;
 bool IRQfromAPU, IRQfromCart;
-bool NMIflag, IRQflag;
-bool IRQdetected, prevIRQdetected;
+bool NMIsignal, IRQsignal;
+bool IRQdetected, IRQflag, NMIdetected, NMIflag;
 
 
 struct StatusReg {
@@ -165,7 +165,8 @@ void powerOn() {
 	reg.PC = memGet(0xFFFC) | memGet(0xFFFD) << 8;
 	//NMI_line_went_low = NMI_triggered = false;
 	//IRQ_line_low = IRQ_triggered = false;
-	NMIflag = IRQflag = IRQfromAPU = IRQfromCart = IRQdetected = prevIRQdetected = false;
+	IRQsignal = IRQfromAPU = IRQfromCart = IRQdetected = IRQflag = false;
+	NMIsignal = NMIdetected = NMIflag = false;
 	cpuCycle = 0;
 	RAM.fill(0);
 }
@@ -206,8 +207,7 @@ void cpuWrite(uint16_t addr, uint8_t val)
 
 void step() {
 	uint8_t opcode;
-	//if(NMI_triggered | IRQ_triggered) {
-	if(prevIRQdetected) {
+	if(IRQflag | NMIflag) {
 		opBRKonIRQ();
 		return;
 	}
@@ -1156,53 +1156,22 @@ void step() {
 
 }
 
-void pollInterrupts() {
-	/*if(NMI_detected) {
-		NMI_triggered = true;
-	}
-	else if(IRQ_detected && reg.P.I == 0) {
-		IRQ_triggered = true;
-	}
-	else {
-		IRQ_triggered = false;
-	}*/
-}
-
 void interruptDetect()
 {
-	prevIRQdetected = IRQdetected;
-	IRQdetected = NMIflag | (IRQflag && (reg.P.I == false));
-
-	/*
-	//Poll interrupts requests, and then check for new requests
-	pollInterrupts();
-	
-	if(NMI_line_went_low) {
-		NMI_detected = true;
-		NMI_line_went_low = false;
-	}
-	if(IRQ_line_low)
-		IRQ_detected = true;
-	else
-		IRQ_detected = false;
-	*/
+	IRQflag = IRQdetected;
+	NMIflag |= NMIdetected;
+	IRQdetected = IRQsignal && (reg.P.I == false);
+	NMIdetected = NMIsignal;
 }
 
 void forceNMI(bool setLow) {
-	if(setLow){
-		setLow = true;
-	}
+	NMIdetected = setLow;
 	NMIflag = setLow;
-	//setNMI(setLow);
-	//NMI_detected = setLow;
+	NMIsignal = setLow;
 }
 
 void setNMI(bool setLow) {
-	NMIflag = setLow;
-	//if(NMI_line_low == false && setLow) {
-	//	NMI_line_went_low = true;
-	//}
-	//NMI_line_low = setLow;
+	NMIsignal = setLow;
 }
 
 void setIRQfromAPU(bool setLow)
@@ -1218,7 +1187,7 @@ void setIRQfromCart(bool setLow)
 }
 
 void setIRQ(bool setLow) {
-	IRQflag = setLow;
+	IRQsignal = setLow;
 }
 
 void OAMDMA_write() {
@@ -1329,8 +1298,8 @@ void logStep()
 		<< " CPUCyc:" << (long long)opInfo.CPUcycle << std::endl;
 	
 	if(opInfo.interrupts != "")	NES::logFile << opInfo.interrupts << std::endl;
-	if(prevIRQdetected && NMIflag) NES::logFile << "[NMI Triggered]" << std::endl;
-	else if(prevIRQdetected) NES::logFile << "[IRQ Triggered]" << std::endl;
+	if(NMIflag) NES::logFile << "[NMI Triggered]" << std::endl;
+	else if(IRQflag) NES::logFile << "[IRQ Triggered]" << std::endl;
 	opInfo.interrupts = "";
 }
 
@@ -1712,7 +1681,7 @@ void opBRK() {
 	reg.P.B = 3;
 	//Will catch interrupts here
 	//if(NMI_triggered || NMI_detected) {
-	if(NMIflag) {
+	if(NMIflag | NMIsignal) {
 		newaddr = 0xFFFA;
 		if(NES::logging) {
 			logInterrupt("[NMI Interrupt during BRK]");
@@ -1731,7 +1700,8 @@ void opBRK() {
 	reg.PC = addr;
 	
 	//Don't immediately allow new interrupts to occur
-	prevIRQdetected = false;
+	IRQflag = false;
+	NMIflag = false;
 }
 
 void opBRKonIRQ() {
@@ -1751,9 +1721,9 @@ void opBRKonIRQ() {
 
 	reg.P.B = 2;
 	
-	if(NMIflag) {
+	if(NMIflag | NMIsignal) {
 		newaddr = 0xFFFA;
-		NMIflag = false;
+		NMIsignal = false;
 	}
 	else { //IRQ detected
 		newaddr = 0xFFFE;
@@ -1766,6 +1736,9 @@ void opBRKonIRQ() {
 	uint16_t addr = cpuRead(newaddr);
 	addr |= cpuRead(newaddr+1) << 8;
 	reg.PC = addr;
+
+	IRQflag = false;
+	NMIflag = false;
 }
 
 void opBVC()  {

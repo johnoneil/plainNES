@@ -28,7 +28,6 @@ uint8_t memGet(uint16_t addr, bool peek = false);
 void memSet(uint16_t addr, uint8_t val);
 
 void OAMDMA_write();
-void pollInterrupts();
 void interruptDetect();
 void setNMI(bool setLow);
 void forceNMI(bool setLow);
