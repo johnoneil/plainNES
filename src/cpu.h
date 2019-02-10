@@ -20,9 +20,9 @@ extern unsigned long long cpuCycle;
 void powerOn();
 void reset();
 void step();
-void incCycle();
-uint8_t cpuRead(uint16_t addr);
-void cpuWrite(uint16_t addr, uint8_t val);
+void incCycle(bool ignoreIRQ=false);
+uint8_t cpuRead(uint16_t addr, bool ignoreIRQ=false);
+void cpuWrite(uint16_t addr, uint8_t val, bool ignoreIRQ=false);
 
 uint8_t memGet(uint16_t addr, bool peek = false);
 void memSet(uint16_t addr, uint8_t val);

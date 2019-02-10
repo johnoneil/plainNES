@@ -176,12 +176,12 @@ void reset() {
 	reg.PC = memGet(0xFFFC) | memGet(0xFFFD) << 8;
 }
 
-void incCycle() {
+void incCycle(bool ignoreIRQ) {
 	++cpuCycle;
 	PPU::step();
 	GAMEPAK::PPUstep();
 	// CPU/PPU/APU function actually happens concurrently. Placement of IRQ detect here has had the best results
-	interruptDetect(); 
+	if(!ignoreIRQ) interruptDetect(); 
 	PPU::step();
 	GAMEPAK::PPUstep();
 	PPU::step();
@@ -190,17 +190,17 @@ void incCycle() {
 	GAMEPAK::CPUstep();
 }
 
-uint8_t cpuRead(uint16_t addr)
+uint8_t cpuRead(uint16_t addr, bool ignoreIRQ)
 {
 	uint8_t value = memGet(addr);
-	incCycle();
+	incCycle(ignoreIRQ);
 	return value;
 }
 
-void cpuWrite(uint16_t addr, uint8_t val)
+void cpuWrite(uint16_t addr, uint8_t val, bool ignoreIRQ)
 {
 	memSet(addr, val);
-	incCycle();
+	incCycle(ignoreIRQ);
 }
 
 void step() {
@@ -1189,6 +1189,7 @@ void setIRQ(bool setLow) {
 }
 
 void OAMDMA_write() {
+	if(NES::logging) logInterrupt("[Sprite DMA Start - Cycle: " + std::to_string(cpuCycle) + "]");
 	//dummy read cpuCycle
 	cpuRead(reg.PC);
 	if(cpuCycle % 2 == 1) {
@@ -1198,6 +1199,7 @@ void OAMDMA_write() {
 	for(int i = 0; i<256; ++i) {
 		cpuWrite(0x2004, cpuRead((((uint16_t)OAMDMA)<<8)|((uint8_t)i)));
 	}
+	if(NES::logging) logInterrupt("[Sprite DMA End - Cycle: " + std::to_string(cpuCycle) + "]");
 }
 
 void setPC(uint16_t newPC) {
@@ -1580,8 +1582,11 @@ void opBCC() {
 		reg.PC += delta;
 		if((oldPC & 0xFF00) != (reg.PC & 0xFF00)) {
 			cpuRead(reg.PC);
+			cpuRead(reg.PC);
 		}
-		cpuRead(reg.PC);
+		else {
+			cpuRead(reg.PC, true);
+		}
 	}
 }
 
@@ -1594,8 +1599,11 @@ void opBCS() {
 		reg.PC += delta;
 		if((oldPC & 0xFF00) != (reg.PC & 0xFF00)) {
 			cpuRead(reg.PC);
+			cpuRead(reg.PC);
 		}
-		cpuRead(reg.PC);
+		else {
+			cpuRead(reg.PC, true);
+		}
 	}
 }
 
@@ -1608,8 +1616,11 @@ void opBEQ() {
 		reg.PC += delta;
 		if((oldPC & 0xFF00) != (reg.PC & 0xFF00)) {
 			cpuRead(reg.PC);
+			cpuRead(reg.PC);
 		}
-		cpuRead(reg.PC);
+		else {
+			cpuRead(reg.PC, true);
+		}
 	}
 }
 
@@ -1630,8 +1641,11 @@ void opBMI() {
 		reg.PC += delta;
 		if((oldPC & 0xFF00) != (reg.PC & 0xFF00)) {
 			cpuRead(reg.PC);
+			cpuRead(reg.PC);
 		}
-		cpuRead(reg.PC);
+		else {
+			cpuRead(reg.PC, true);
+		}
 	}
 }
 
@@ -1644,8 +1658,11 @@ void opBNE() {
 		reg.PC += delta;
 		if((oldPC & 0xFF00) != (reg.PC & 0xFF00)) {
 			cpuRead(reg.PC);
+			cpuRead(reg.PC);
 		}
-		cpuRead(reg.PC);
+		else {
+			cpuRead(reg.PC, true);
+		}
 	}
 }
 
@@ -1658,8 +1675,11 @@ void opBPL() {
 		reg.PC += delta;
 		if((oldPC & 0xFF00) != (reg.PC & 0xFF00)) {
 			cpuRead(reg.PC);
+			cpuRead(reg.PC);
 		}
-		cpuRead(reg.PC);
+		else {
+			cpuRead(reg.PC, true);
+		}
 	}
 }
 
@@ -1748,8 +1768,11 @@ void opBVC()  {
 		reg.PC += delta;
 		if((oldPC & 0xFF00) != (reg.PC & 0xFF00)) {
 			cpuRead(reg.PC);
+			cpuRead(reg.PC);
 		}
-		cpuRead(reg.PC);
+		else {
+			cpuRead(reg.PC, true);
+		}
 	}
 }
 
@@ -1762,8 +1785,11 @@ void opBVS() {
 		reg.PC += delta;
 		if((oldPC & 0xFF00) != (reg.PC & 0xFF00)) {
 			cpuRead(reg.PC);
+			cpuRead(reg.PC);
 		}
-		cpuRead(reg.PC);
+		else {
+			cpuRead(reg.PC, true);
+		}
 	}
 }
 
