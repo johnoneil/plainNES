@@ -15,16 +15,14 @@ namespace CPU {
 unsigned long long cpuCycle;
 
 //Interupts (NMI and IRQ) go through 3 steps when triggering the CPU
-//Step 1: A device pulls the NMI or IRQ line low (simulated with setNMI() and setIRQ())
+//Step 1: A device pulls the NMI or IRQ line low (simulated with setNMI() and setIRQfromX() setting NMIsignal or IRQ signal)
+//		  IRQfromAPU and IRQfromCart used to ensure proper behavior with multiple devices possibly pulling the line low
 //Step 2: During phi2 of each CPU cycle, the status of these lines is detected (simulated with interruptDetect())
 //		  If interrupt detected on lines, the internal NMI or IRQ detected signal is triggered during the following phi1
-//		  NMI detects falling edge. IRQ detects low level
-//		  For NMI, this detected signal stays active until cleared. For IRQ, it remains active for only that cycle
-//Step 3: The NMI/IRQ detected signals are polled during certain points, usually the last cycle of each operation
-//		  If a signal is detected, the next operation issued is the interrupt sequence (similar to BRK)
-//bool NMI_line_low, NMI_line_went_low, IRQ_line_low;
-//bool NMI_detected, IRQ_detected;
-//bool NMI_triggered, IRQ_triggered;
+//		  This sets IRQ/NMIdetected in the emulator
+//Step 3: The NMI/IRQ detected signals are polled at certain points. Documentation is unclear, but is assumed to also be
+//		  during phi2 of each CPU cycle. This behavior is also simulated with interruptDetect(), which sets the IRQ/NMIflag
+
 bool IRQfromAPU, IRQfromCart;
 bool NMIsignal, IRQsignal;
 bool IRQdetected, IRQflag, NMIdetected, NMIflag;
@@ -1681,7 +1679,7 @@ void opBRK() {
 	reg.P.B = 3;
 	//Will catch interrupts here
 	//if(NMI_triggered || NMI_detected) {
-	if(NMIflag | NMIsignal) {
+	if(NMIflag | NMIdetected) {
 		newaddr = 0xFFFA;
 		if(NES::logging) {
 			logInterrupt("[NMI Interrupt during BRK]");
@@ -1721,7 +1719,7 @@ void opBRKonIRQ() {
 
 	reg.P.B = 2;
 	
-	if(NMIflag | NMIsignal) {
+	if(NMIflag | NMIdetected) {
 		newaddr = 0xFFFA;
 		NMIsignal = false;
 	}
