@@ -1190,12 +1190,12 @@ void setIRQ(bool setLow) {
 
 void OAMDMA_write() {
 	if(NES::logging) logInterrupt("[Sprite DMA Start - Cycle: " + std::to_string(cpuCycle) + "]");
-	//dummy read cpuCycle
-	cpuRead(reg.PC);
 	if(cpuCycle % 2 == 1) {
 		//Odd cpuCycle
 		cpuRead(reg.PC);
 	}
+	//dummy read cpuCycle
+	cpuRead(reg.PC);
 	for(int i = 0; i<256; ++i) {
 		cpuWrite(0x2004, cpuRead((((uint16_t)OAMDMA)<<8)|((uint8_t)i)));
 	}

@@ -333,10 +333,16 @@ void regSet(uint16_t addr, uint8_t val)
 			break;
 
 		case 0x2007: //PPUDATA
-			//TODO: Implement special behavior during rendering
 			GAMEPAK::PPUmemSet(currVRAM_addr.value, val);
-			if(incrementMode == 0) ++currVRAM_addr.value;
-			else currVRAM_addr.value += 32;
+			if(rendering && (scanline == 261 || scanline < 240)) {
+				//Special behavior during rendering
+				incrementHorz();
+				incrementVert();
+			}
+			else {
+				if(incrementMode == 0) ++currVRAM_addr.value;
+				else currVRAM_addr.value += 32;
+			}
 			setBusAddr(currVRAM_addr.value);
 			break;
 		default:
@@ -516,22 +522,22 @@ void spriteEval()
 					//Check if flipped vertically
 					if((spriteL[sprNum] & 0x80) > 0) yPos = 7 - yPos;
 					sprAddr = (sprAddr << 4) + yPos;
+					sprAddr &= 0x0FFF;
 					if(spriteTileSel) sprAddr |= 0x1000;
-					else sprAddr &= 0xEFFF;
 				}
 				else { //8x16 bit sprite
 					if((spriteL[sprNum] & 0x80) > 0) yPos = 15 - yPos;
-					if((sprAddr & 1) == 0) {
-						sprAddr <<= 4;
-					}
-					else {
-						sprAddr = ((sprAddr & 0xFE) << 4) | 0x1000;
-					}
+					bool rightPT = false;
+					if((sprAddr & 1) == 0) rightPT = false;
+					else rightPT = true;
+					sprAddr = ((sprAddr & 0xFE) << 4);
 					if(yPos > 7) {
 						sprAddr += 16;
 						yPos -= 8;
 					}
 					sprAddr += yPos;
+					sprAddr &= 0x0FFF;
+					if(rightPT) sprAddr |= 0x1000;
 				}
 			}
 			else if((dot - 257) % 8 == 4) { //Sprite tile low fetch
