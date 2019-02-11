@@ -49,6 +49,9 @@ uint8_t Mapper4::memGet(uint16_t addr, bool peek)
 
 void Mapper4::memSet(uint16_t addr, uint8_t val)
 {
+    if(addr >= 0x6000 && addr < 0x8000) {
+        PRGRAM.at((addr - 0x6000) % 0x2000) = val;
+    }
     if(addr >= 0x8000 && addr < 0xA000) {
         if(addr % 2 == 0) { //Even
             regWriteSel = val & 7;
@@ -265,13 +268,6 @@ void Mapper4::powerOn()
     IRQlatch = 0;
 }
 
-void Mapper4::CPUstep()
-{
-    //M2 rises and falls every CPU cycle
-    //if((lastVRAMaddr & 0x1000) == 0)
-    //    ++M2cntr;
-}
-
 void Mapper4::PPUstep()
 {
     CPU::setIRQfromCart(IRQrequested);
@@ -280,7 +276,7 @@ void Mapper4::PPUstep()
 void Mapper4::PPUbusAddrChanged(uint16_t newAddr)
 {
     if((lastVRAMaddr & 0x1000) == 0 && (newAddr & 0x1000) > 0) {
-        std::cout << PPU::scanline << ":" << PPU::dot << " Clocking" << std::endl;
+        //std::cout << PPU::scanline << ":" << PPU::dot << " Clocking" << std::endl;
         if(IRQcntr == 0 || IRQreload) {
             IRQcntr = IRQlatch;
             IRQreload = false;

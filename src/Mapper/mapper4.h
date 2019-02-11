@@ -35,7 +35,6 @@ class Mapper4 : public Mapper {
 
     void powerOn() override;
 
-    void CPUstep() override;
     void PPUstep() override;
 
     void PPUbusAddrChanged(uint16_t newAddr) override;
