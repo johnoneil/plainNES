@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+#set -e
 
 # Run Release by default
 # Define an env variable BUILD=Debug or other to override
@@ -7,6 +7,7 @@ BUILD="${BUILD:-Release}"
 ROM="${ROM:-test/roms/legend.of.zelda.nes}"
 VALGRIND="${VALGRIND:-valgrind}"
 KCACHEGRIND="${KCACHEGRIND:-kcachegrind}"
+VALGRIND_OUTFILE="${VALGRIND_OUTFILE:-callgrind.output}"
 
 BUILD_DIR=build/${BUILD}
 EXE=${BUILD_DIR}/bin/plainNES
@@ -22,7 +23,8 @@ if [ ! -f "$ROM" ]; then
     exit -1
 fi
 
-${VALGRIND} --tool=callgrind ${EXE} ${ROM}
+${VALGRIND} --tool=callgrind --callgrind-out-file="${VALGRIND_OUTFILE}" ${EXE} ${ROM}
+${KCACHEGRIND} ${VALGRIND_OUTFILE}
 
 
 
