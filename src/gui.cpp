@@ -12,8 +12,10 @@
 #include <array>
 #include <vector>
 #include <iostream>
+#if defined(__WIN32__)
 #include <windows.h>
 #include <commdlg.h>
+#endif
 
 namespace GUI {
 
@@ -373,7 +375,9 @@ void _drawmainMenuBar() {
     static bool menu_get_frameInfo = false;
 	//static std::map<std::string, bool> menu_open_recent;
 	
+    #if defined(__WIN32__)
 	if(menu_open_file){ onOpenFile(); menu_open_file = false; }
+    #endif
 	if(menu_quit){ onQuit(); menu_quit = false; }
 	if(menu_emu_run){ onEmuRun(); menu_emu_run = false; }
 	if(menu_emu_pause){ onEmuPause(); menu_emu_pause = false; }
@@ -444,6 +448,7 @@ void _drawmainMenuBar() {
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
+#if defined(__WIN32__)
 void onOpenFile()
 {
     char filename[ MAX_PATH ];
@@ -465,6 +470,7 @@ void onOpenFile()
         NES::powerOn();
     }
 }
+#endif
 
 void onQuit()
 {

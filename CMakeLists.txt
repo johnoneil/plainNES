@@ -1,11 +1,8 @@
 cmake_minimum_required(VERSION 3.13)
 project(plainNES)
 
-#Location of Boost and SDL2
-set(BOOST_ROOT "C:/dev_libs/boost")
-set(SDL2_PATH "C:/dev_libs/SDL2")
-set(SDL2_TTF_PATH "C:/dev_libs/SDL2")
-set(CATCH2_PATH "C:/dev_libs/Catch2-master/single_include/")
+# Dependencies
+set(CATCH2_PATH "${CMAKE_SOURCE_DIR}/Catch2/single_include")
 
 #Use bin folder for output and lib folder for library output
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -29,7 +26,7 @@ include_directories(${SDL2_TTF_INCLUDE_DIRS})
 include_directories(${OPENGL_INCLUDE_DIR})
 
 #GLAD
-set(GLAD_DIR "C:/dev_libs/GLAD")
+set(GLAD_DIR ${CMAKE_SOURCE_DIR}/glad)
 add_library("glad" "${GLAD_DIR}/src/glad.c")
 target_include_directories("glad" PRIVATE "${GLAD_DIR}/include")
 include_directories("${GLAD_DIR}/include")
@@ -86,8 +83,11 @@ set_target_properties(ROMtests PROPERTIES RUNTIME_OUTPUT_DIRECTORY test)
 
 #Libraries for both executables
 #Unit tests not using GUI
-target_link_libraries(plainNES NES mingw32 SDL2 SDL2main ${SDL2_TTF_LIBRARIES} ${Boost_LIBRARIES} "glad" ${OPENGL_gl_LIBRARY} comdlg32)
-target_link_libraries(ROMtests NES mingw32)
+IF (WIN32)
+  set(WINDOWS_LIBS mingw32 comdlg32)
+ENDIF()
+target_link_libraries(plainNES NES SDL2 SDL2main ${SDL2_TTF_LIBRARIES} ${Boost_LIBRARIES} "glad" ${OPENGL_gl_LIBRARY} ${CMAKE_DL_LIBS} ${WINDOWS_LIBS})
+target_link_libraries(ROMtests NES ${WINDOWS_LIBS})
 
 #Copy over Resources folder into bin
 add_custom_command(TARGET plainNES POST_BUILD
