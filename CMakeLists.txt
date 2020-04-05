@@ -88,8 +88,3 @@ IF (WIN32)
 ENDIF()
 target_link_libraries(plainNES NES SDL2 SDL2main ${SDL2_TTF_LIBRARIES} ${Boost_LIBRARIES} "glad" ${OPENGL_gl_LIBRARY} ${CMAKE_DL_LIBS} ${WINDOWS_LIBS})
 target_link_libraries(ROMtests NES ${WINDOWS_LIBS})
-
-#Copy over Resources folder into bin
-add_custom_command(TARGET plainNES POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    ${CMAKE_SOURCE_DIR}/Resources $<TARGET_FILE_DIR:plainNES>)

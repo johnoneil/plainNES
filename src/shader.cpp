@@ -9,50 +9,33 @@
 #include <sstream>
 #include <iostream>
 
+const char* vShaderCode = "#version 330 core\n"
+"layout (location = 0) in vec3 aPos;\n"
+"layout (location = 1) in vec2 aTexCoord;\n"
+"out vec2 TexCoord;\n"
+"void main()\n"
+"{\n"
+"gl_Position = vec4(aPos, 1.0);\n"
+"TexCoord = vec2(aTexCoord.x, aTexCoord.y);\n"
+"}";
+
+const char* fShaderCode = "#version 330 core\n"
+"out vec4 FragColor;\n"
+"in vec2 TexCoord;\n"
+"uniform sampler2D texture1;\n"
+"void main()\n"
+"{\n"
+"FragColor = texture(texture1, TexCoord);\n"
+"}";
+
 Shader::Shader()
 {
-
+	//init();
 }
 
-Shader::Shader(const GLchar* vertexPath, const GLchar* fragmentPath)
+void Shader::init()
 {
-	init(vertexPath, fragmentPath);
-}
-
-void Shader::init(const char* vertexPath, const char* fragmentPath)
-{
-	// 1. retrieve the vertex/fragment source code from filePath
-	std::string vertexCode;
-	std::string fragmentCode;
-	std::ifstream vShaderFile;
-	std::ifstream fShaderFile;
-	// ensure ifstream objects can throw exceptions:
-	vShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-	fShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-	try
-	{
-		// open files
-		vShaderFile.open(vertexPath);
-		fShaderFile.open(fragmentPath);
-		std::stringstream vShaderStream, fShaderStream;
-		// read file's buffer contents into streams
-		vShaderStream << vShaderFile.rdbuf();
-		fShaderStream << fShaderFile.rdbuf();
-		// close file handlers
-		vShaderFile.close();
-		fShaderFile.close();
-		// convert stream into string
-		vertexCode = vShaderStream.str();
-		fragmentCode = fShaderStream.str();
-	}
-	catch (std::ifstream::failure e)
-	{
-		std::cout << "ERROR::SHADER::FILE_NOT_SUCCESFULLY_READ" << std::endl;
-	}
-	const char* vShaderCode = vertexCode.c_str();
-	const char* fShaderCode = fragmentCode.c_str();
-
-	// 2. compile shaders
+	// compile shaders
 	unsigned int vertex, fragment;
 	int success;
 	char infoLog[512];

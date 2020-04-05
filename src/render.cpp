@@ -1,6 +1,10 @@
 #include "render.h"
 #include <fstream>
 #include <array>
+#include <vector>
+
+// Generated via: `xxd -i Resources/ntscpalette.pal > src/ntscpallete_pal.h`
+#include "ntscpallete_pal.h"
 
 namespace RENDER {
 
@@ -8,17 +12,10 @@ std::array<uint32_t, 0x40> NTSCkey;
 
 int init()
 {
-    std::ifstream PALfile("ntscpalette.pal",std::ios::binary);
-    std::array<uint8_t, 3> buffer;
+    std::vector<unsigned char> palette(Resources_ntscpalette_pal, Resources_ntscpalette_pal + Resources_ntscpalette_pal_len);
     for(int i=0; i<0x40; ++i) {
-        if(PALfile.eof()) {
-            PALfile.close();
-            return 1;
-        }
-        PALfile.read((char*)buffer.data(), 3);
-        NTSCkey[i] = (buffer[0]<<16)|(buffer[1]<<8)|(buffer[2]);
+        NTSCkey[i] = (palette[i*3+0]<<16)|(palette[i*3+1]<<8)|(palette[i*3+2]);
     }
-    PALfile.close();
     return 0;
 }
 

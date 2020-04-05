@@ -53,7 +53,7 @@ int init()
     }
 
     int expectedMenuBarSize = 19;
-    mainDisplay.init(SCREEN_WIDTH*SCREEN_SCALE, SCREEN_HEIGHT*SCREEN_SCALE + expectedMenuBarSize, "plainNES", "texture.vert", "texture.frag");
+    mainDisplay.init(SCREEN_WIDTH*SCREEN_SCALE, SCREEN_HEIGHT*SCREEN_SCALE + expectedMenuBarSize, "plainNES");
 
     // Setup imGui context
     IMGUI_CHECKVERSION();

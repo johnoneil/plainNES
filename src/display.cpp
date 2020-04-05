@@ -9,10 +9,9 @@ Display::Display()
 
 }
 
-Display::Display(int width, int height, const char* title,
-    const char* vertexPath, const char* fragmentPath)
+Display::Display(int width, int height, const char* title)
 {
-    init(width, height, title, vertexPath, fragmentPath);
+    init(width, height, title);
 }
 
 Display::~Display()
@@ -25,7 +24,7 @@ Display::~Display()
     SDL_DestroyWindow(window);
 }
 
-void Display::init(int width, int height, const char* title, const char* vertexPath, const char* fragmentPath)
+void Display::init(int width, int height, const char* title)
 {
     window = SDL_CreateWindow(title,
                 SDL_WINDOWPOS_UNDEFINED,
@@ -43,7 +42,7 @@ void Display::init(int width, int height, const char* title, const char* vertexP
         std::cout << "Failed to initialize GLAD" << std::endl;
     }
 
-    shader.init(vertexPath, fragmentPath);
+    shader.init();
 
     //Setup vertex data and buffers and configure
     glGenVertexArrays(1, &VAO);
