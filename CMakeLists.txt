@@ -10,7 +10,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 #Location of FindSDL2.cmake files
-set(CMAKE_MODULE_PATH cmake)
+set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 
 #Needed to properly find Boost libraries
 set(Boost_ARCHITECTURE "-x32")
@@ -31,8 +31,10 @@ add_library("glad" "${GLAD_DIR}/src/glad.c")
 target_include_directories("glad" PRIVATE "${GLAD_DIR}/include")
 include_directories("${GLAD_DIR}/include")
 
+IF (WIN32)
 set(GLM_DIR "C:/dev_libs/GLM")
 include_directories("${GLM_DIR}/include")
+ENDIF ()
 
 add_compile_definitions(IMGUI_IMPL_OPENGL_LOADER_GLAD)
 
