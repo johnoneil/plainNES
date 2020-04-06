@@ -3,10 +3,9 @@
 
 #include <iostream>
 #include <string>
-#include <boost/crc.hpp>
+#include <zlib.h>
 #include "nes.h"
 
-boost::crc_optimal<32, 0x04C11DB7, 0xFFFFFFFF, 0xFFFFFFFF, true, true> CRC32;
 const uint32_t CRC_check = 0xCBF43926;
 
 uint32_t getROM_CRC(unsigned long atFrame);
@@ -18,11 +17,11 @@ uint32_t getROM_CRC(std::string ROMfile, unsigned long atFrame, bool load);
 
 //Preliminary CRC32 Check
 TEST_CASE( "CRC function working correctly - Needed for other tests", "[Working]" ) {
+
     std::string input = "123456789";
-    CRC32.reset();
-    CRC32.process_bytes(input.c_str(), input.size());
+    unsigned int crc = crc32(0L, (Bytef*)(input.c_str()), input.size());
     
-    REQUIRE( CRC32.checksum() == CRC_check );
+    REQUIRE( crc == CRC_check );
 }
 
 //CPU Tests
@@ -268,7 +267,5 @@ uint32_t getROM_CRC(std::string ROMfile, unsigned long atFrame, bool load)
         loadROM(ROMfile);
     runUntil(atFrame);
     uint8_t *screenOutput = NES::getPixelMap();
-    CRC32.reset();
-    CRC32.process_bytes(screenOutput, 240*256);
-    return CRC32.checksum();
+    return crc32(0L, screenOutput, 240*256);;
 }

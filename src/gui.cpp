@@ -7,7 +7,7 @@
 #include "imgui/imgui_impl_opengl3.h"
 #include <SDL.h>
 #include <glad/glad.h>
-#include <boost/crc.hpp>
+#include <zlib.h> //crc32
 #include <cstring>
 #include <array>
 #include <vector>
@@ -525,11 +525,9 @@ void onDebugWindow()
 
 void onGetFrameInfo()
 {
-    boost::crc_optimal<32, 0x04C11DB7, 0xFFFFFFFF, 0xFFFFFFFF, true, true> CRC32;
     uint8_t *screenOutput = NES::getPixelMap();
-    CRC32.reset();
-    CRC32.process_bytes(screenOutput, 240*256);
-    std::cout << "FrameNum: " << std::dec << NES::getFrameNum() << " CRC: 0x" << std::hex << (int)CRC32.checksum() << std::endl;
+    unsigned int crc = crc32(0L, screenOutput, 240*256);
+    std::cout << "FrameNum: " << std::dec << NES::getFrameNum() << " CRC: 0x" << std::hex << crc << std::endl;
 }
 
 

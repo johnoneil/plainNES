@@ -19,6 +19,7 @@ find_package(Boost COMPONENTS chrono program_options REQUIRED)
 find_package(SDL2 REQUIRED)
 find_package(SDL2_ttf REQUIRED)
 find_package(OpenGL REQUIRED)
+find_package(ZLIB REQUIRED)
 
 include_directories(${Boost_INCLUDE_DIRS})
 include_directories(${SDL2_INCLUDE_DIRS})
@@ -59,7 +60,7 @@ target_sources(NES PRIVATE
                 src/Mapper/mapper3.cpp
                 src/Mapper/mapper4.cpp
                )
-target_include_directories(NES PRIVATE src)
+target_include_directories(NES PRIVATE src )
 
 #Main executable
 add_executable(plainNES
@@ -88,5 +89,5 @@ set_target_properties(ROMtests PROPERTIES RUNTIME_OUTPUT_DIRECTORY test)
 IF (WIN32)
   set(WINDOWS_LIBS mingw32 comdlg32)
 ENDIF()
-target_link_libraries(plainNES NES SDL2 SDL2main ${SDL2_TTF_LIBRARIES} ${Boost_LIBRARIES} "glad" ${OPENGL_gl_LIBRARY} ${CMAKE_DL_LIBS} ${WINDOWS_LIBS})
-target_link_libraries(ROMtests NES ${WINDOWS_LIBS})
+target_link_libraries(plainNES NES SDL2 SDL2main ${SDL2_TTF_LIBRARIES} ZLIB::ZLIB ${Boost_LIBRARIES} "glad" ${OPENGL_gl_LIBRARY} ${CMAKE_DL_LIBS} ${WINDOWS_LIBS})
+target_link_libraries(ROMtests NES ZLIB::ZLIB ${WINDOWS_LIBS})
