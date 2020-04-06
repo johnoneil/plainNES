@@ -22,6 +22,8 @@ int start(StartOptions startOptions)
 		GUI::update();
 		NES::frameStep();
 	}
+
+    return 0;
 }
 
 } //EMULATOR
