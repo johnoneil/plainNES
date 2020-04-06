@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.13)
 project(plainNES)
 
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+
 # Dependencies
 set(CATCH2_PATH "${CMAKE_SOURCE_DIR}/Catch2/single_include")
 
