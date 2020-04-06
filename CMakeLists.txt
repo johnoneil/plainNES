@@ -12,16 +12,11 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 #Location of FindSDL2.cmake files
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 
-#Needed to properly find Boost libraries
-set(Boost_ARCHITECTURE "-x32")
-
-find_package(Boost COMPONENTS chrono program_options REQUIRED)
 find_package(SDL2 REQUIRED)
 find_package(SDL2_ttf REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(ZLIB REQUIRED)
 
-include_directories(${Boost_INCLUDE_DIRS})
 include_directories(${SDL2_INCLUDE_DIRS})
 include_directories(${SDL2_TTF_INCLUDE_DIRS})
 include_directories(${OPENGL_INCLUDE_DIR})
@@ -89,5 +84,5 @@ set_target_properties(ROMtests PROPERTIES RUNTIME_OUTPUT_DIRECTORY test)
 IF (WIN32)
   set(WINDOWS_LIBS mingw32 comdlg32)
 ENDIF()
-target_link_libraries(plainNES NES SDL2 SDL2main ${SDL2_TTF_LIBRARIES} ZLIB::ZLIB ${Boost_LIBRARIES} "glad" ${OPENGL_gl_LIBRARY} ${CMAKE_DL_LIBS} ${WINDOWS_LIBS})
+target_link_libraries(plainNES NES SDL2 SDL2main ${SDL2_TTF_LIBRARIES} ZLIB::ZLIB "glad" ${OPENGL_gl_LIBRARY} ${CMAKE_DL_LIBS} ${WINDOWS_LIBS})
 target_link_libraries(ROMtests NES ZLIB::ZLIB ${WINDOWS_LIBS})

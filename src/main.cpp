@@ -1,40 +1,22 @@
 #include "emulator.h"
 #include <iostream>
 #include <string>
-#include <boost/program_options.hpp>
+#include "cxxopts.hpp"
 
 int main(int argc, char *argv[])
 {
-	namespace po = boost::program_options;
-	po::options_description desc("Options");
-	desc.add_options()
-		("help,h", "Command line option help")
-		("file", "ROM file to open")
-		("PC", po::value<uint16_t>(), "Start program at specific memory address")
-		("log", "enable logging")
-		("disableAudio", "Disables audio, unthrottling emulator");
-	po::variables_map vm;
+	cxxopts::Options options("plainNES", "NES Emulator");
+	options.add_options()
+		("f,file", "File name", cxxopts::value<std::string>())
+		("PC", "Start program at specific memory address", cxxopts::value<uint16_t>())
+		("log", "enable logging", cxxopts::value<bool>()->default_value("false"))
+		("disableAudio", "Disables audio, unthrottling emulator", cxxopts::value<bool>()->default_value("false"))
+		("h,help", "Print usage")
+		;
 
-	po::positional_options_description p;
-	p.add("file", 1);
+	options.parse_positional({"file"});
 
-	try
-	{
-		po::store(po::command_line_parser(argc, argv).options(desc).positional(p).run(), vm);
-		po::notify(vm);
-
-		if(vm.count("help")) {
-			std::cout << "plainNES - A simple NES emulator\n";
-			std::cout << desc << std::endl;
-			return 0;
-		}
-	}
-	catch(po::error& e)
-	{
-		std::cerr << "ERROR: " << e.what() << "\n" << std::endl;
-		std::cerr << desc << std::endl;
-		return 1;
-	}
+	auto vm = options.parse(argc, argv);
 
 	//Parse command line options
 	EMULATOR::StartOptions startOptions;
