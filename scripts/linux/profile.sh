@@ -8,8 +8,9 @@ ROM="${ROM:-test/roms/legend.of.zelda.nes}"
 VALGRIND="${VALGRIND:-valgrind}"
 KCACHEGRIND="${KCACHEGRIND:-kcachegrind}"
 VALGRIND_OUTFILE="${VALGRIND_OUTFILE:-callgrind.output}"
+PLATFORM=linux
 
-BUILD_DIR=build/${BUILD}
+BUILD_DIR=build/${PLATFORM}/${BUILD}
 EXE=${BUILD_DIR}/bin/plainNES
 
 # Make sure we can find our binary
