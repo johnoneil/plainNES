@@ -2,6 +2,7 @@
 
 #include <string>
 #include <iomanip>
+#include <sstream>
 
 std::string int_to_hex(uint8_t i)
 {

@@ -12,6 +12,7 @@
 #include <vector>
 #include <array>
 #include <math.h>
+#include <cmath>
 
 namespace GAMEPAK {
 

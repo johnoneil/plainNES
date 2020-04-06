@@ -3,6 +3,9 @@ project(plainNES)
 
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 # Dependencies
 set(CATCH2_PATH "${CMAKE_SOURCE_DIR}/Catch2/single_include")
 
@@ -15,13 +18,21 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 
 find_package(SDL2 REQUIRED)
+include_directories(${SDL2_INCLUDE_DIRS})
+
 find_package(SDL2_ttf REQUIRED)
+include_directories(${SDL2_TTF_INCLUDE_DIRS})
+
 find_package(OpenGL REQUIRED)
+include_directories(${OPENGL_INCLUDE_DIR})
+
 find_package(ZLIB REQUIRED)
 
-include_directories(${SDL2_INCLUDE_DIRS})
-include_directories(${SDL2_TTF_INCLUDE_DIRS})
-include_directories(${OPENGL_INCLUDE_DIR})
+find_package(GLM REQUIRED)
+include_directories(${GLM_INCLUDE_DIRS})
+link_directories(${GLM_LIBRARY_DIRS})
+add_definitions(${GLM_DEFINITIONS})
+
 
 #GLAD
 set(GLAD_DIR ${CMAKE_SOURCE_DIR}/glad)
@@ -86,5 +97,5 @@ set_target_properties(ROMtests PROPERTIES RUNTIME_OUTPUT_DIRECTORY test)
 IF (WIN32)
   set(WINDOWS_LIBS mingw32 comdlg32)
 ENDIF()
-target_link_libraries(plainNES NES SDL2 SDL2main ${SDL2_TTF_LIBRARIES} ZLIB::ZLIB "glad" ${OPENGL_gl_LIBRARY} ${CMAKE_DL_LIBS} ${WINDOWS_LIBS})
+target_link_libraries(plainNES NES ${SDL2_LIBRARIES} ${SDL2_TTF_LIBRARIES} ZLIB::ZLIB "glad" ${OPENGL_gl_LIBRARY} ${CMAKE_DL_LIBS} ${WINDOWS_LIBS})
 target_link_libraries(ROMtests NES ZLIB::ZLIB ${WINDOWS_LIBS})
