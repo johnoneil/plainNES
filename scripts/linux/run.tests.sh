@@ -4,8 +4,9 @@ set -e
 # Define an env variable BUILD=Release or other to override
 BUILD="${BUILD:-Debug}"
 TESTS_DIR="${ROM:-test}"
+PLATFORM=linux
 
-BUILD_DIR=build/${BUILD}
+BUILD_DIR=build/${PLATFORM}/${BUILD}
 EXE=${BUILD_DIR}/test/ROMtests
 
 # Make sure we can find our binary
@@ -19,6 +20,5 @@ if [ ! -d "${TESTS_DIR}/roms" ]; then
     exit 1
 fi
 
-echo going to dir ${TESTS_DIR}
 cd "${TESTS_DIR}"
 ../${EXE}
