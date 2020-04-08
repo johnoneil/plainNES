@@ -672,8 +672,12 @@ void incrementVert()
 std::array<std::array<uint8_t, 16*16*64>, 2> getPatternTableBuffers() //Used in displaying pattern tables for debugging
 {
 	std::array<uint8_t,4> palette;
-	for(int i=0; i<4; ++i)
-		palette[i] = getPalette(i);
+	// Just choosing arbitrary palette colors that allow analysis on some common games.
+	// There might be a better way to do this, but I don't know what it is.
+	palette[0] = getPalette(0x10); // bg
+	palette[1] = getPalette(0x05);
+	palette[2] = getPalette(0x06);
+	palette[3] = getPalette(0x07);
 	
 	std::array<std::array<uint8_t, 16*16*64>, 2> PTpixelmap;
 	uint16_t addr, tilerowL, tilerowH;

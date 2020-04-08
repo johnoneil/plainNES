@@ -17,11 +17,25 @@
 #include <commdlg.h>
 #endif
 
+#define DEBUG_GUI
+#if defined(DEBUG_GUI)
+static bool enableDebugGui = true;
+#else
+static bool enableDebugGui = false;
+#endif
+
 namespace GUI {
 
 Display mainDisplay;
 SDL_Event event;
 const uint8_t *kbState = SDL_GetKeyboardState(NULL);
+SDL_Window* PPUwindow = nullptr;
+SDL_Renderer* PPUrenderer = nullptr;
+SDL_Texture* PTtexture0 = nullptr;
+SDL_Texture* PTtexture1 = nullptr;
+SDL_Rect rectPT0;
+SDL_Rect rectPT1;
+SDL_Rect PaletteRect[14][14];
 
 std::array<uint8_t, SCREEN_WIDTH * SCREEN_HEIGHT * 3> mainpixelMap;
 std::array<uint32_t, 16*8 * 16*8> PTpixelMap;
@@ -79,7 +93,8 @@ int init()
     return 0;
 }
 
-/*int initPPUWindow() {
+#if defined(DEBUG_GUI)
+int initPPUWindow() {
     PPUwindow = SDL_CreateWindow("plainNES - PPU Debugging",
                 50, 50,
                 (32*8 + 62 + 4 + 4)*SCREEN_SCALE,(16*8 + 4)*SCREEN_SCALE,
@@ -141,7 +156,22 @@ int init()
     SDL_RenderPresent(PPUrenderer);
 
     return 0;
-}*/
+}
+
+int destroyPPUWindow()
+{
+    if(PPUrenderer)
+    {
+        SDL_DestroyRenderer(PPUrenderer);
+        PPUrenderer = nullptr;
+    }
+    if(PPUwindow) {
+        SDL_DestroyWindow(PPUwindow);
+        PPUwindow = nullptr;
+    }
+    return 0;
+}
+#endif
 
 int initAudio() {
     audio_rb_idx = 0;
@@ -271,9 +301,11 @@ void update()
     NES::controller_state[1] = 0;
     
     updateMainWindow();
-    //if(debugPPU) {
-    //    updatePPUWindow();
-    //}
+#if defined(DEBUG_GUI)
+    if(debugPPU) {
+        updatePPUWindow();
+    }
+#endif
     if(disableAudio == false)
         updateAudio();
 
@@ -290,7 +322,8 @@ void updateMainWindow() {
     mainDisplay.renderFrame();
 }
 
-/*void updatePPUWindow() {
+#if defined(DEBUG_GUI)
+void updatePPUWindow() {
     std::array<std::array<uint8_t, 16*16*64>, 2> PTarrays = NES::getPatternTableBuffers();
     RENDER::convertNTSC2ARGB(PTpixelMap.data(), PTarrays[0].data(), PTarrays[0].size());
     SDL_UpdateTexture(PTtexture0, NULL, PTpixelMap.data(), 16*8*4);
@@ -317,7 +350,8 @@ void updateMainWindow() {
     }
 
     SDL_RenderPresent(PPUrenderer);
-}*/
+}
+#endif
 
 void updateAudio() {
     //Currently downsample using nearest neighbor method
@@ -388,7 +422,7 @@ void _drawmainMenuBar() {
 	if(menu_emu_speedmax){ onEmuSpeedMax(); menu_emu_speedmax = false; }
     //if(menu_configInput){ onConfigInput(); menu_configInput = false; }
 	if(menu_showFPS){ onShowFPS(); menu_showFPS = false; }
-	if(menu_debugWindow){ onDebugWindow(); menu_debugWindow = false; }
+    if(menu_debugWindow){ onDebugWindow(); menu_debugWindow = false; debugPPU = true; }
     if(menu_get_frameInfo){ onGetFrameInfo(); menu_get_frameInfo = false; }
 
     ImGui_ImplOpenGL3_NewFrame();
@@ -434,7 +468,7 @@ void _drawmainMenuBar() {
 		{
             //ImGui::MenuItem("Configure Input", NULL, &menu_configInput);
 			ImGui::MenuItem("Show FPS", NULL, &menu_showFPS);
-			ImGui::MenuItem("Debug Window", NULL, &menu_debugWindow, false);
+			ImGui::MenuItem("Debug Window", NULL, &menu_debugWindow, enableDebugGui);
             ImGui::MenuItem("Get Frame Info", NULL, &menu_get_frameInfo);
 			ImGui::EndMenu();
 		}
@@ -520,7 +554,12 @@ void onShowFPS()
 
 void onDebugWindow()
 {
-    //TODO get debug window working
+#if defined(DEBUG_GUI)
+    if(!PPUwindow)
+        initPPUWindow();
+    else
+        destroyPPUWindow();
+#endif
 }
 
 void onGetFrameInfo()
@@ -534,7 +573,9 @@ void onGetFrameInfo()
 void close()
 {
     delete &mainDisplay;
-    //SDL_DestroyWindow(PPUwindow);
+#if defined(DEBUG_GUI)
+    destroyPPUWindow();
+#endif
     SDL_CloseAudioDevice(1);
     SDL_Quit();
     return;
